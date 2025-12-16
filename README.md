@@ -5,7 +5,7 @@
 ## What's Included
 
 ```
-src/
+pugo-core/
 ├── pages/                 # All admin pages (dashboard, editor, media, etc.)
 │   ├── index.php         # Dashboard
 │   ├── articles.php      # Article listing
@@ -50,7 +50,7 @@ Each Pugo site has this structure:
 ```
 my-site/
 ├── admin/
-│   ├── core/              ← Copy of pugo-core/src/ (updateable)
+│   ├── core/              ← Git submodule pointing to pugo-core
 │   ├── content_types/     ← Site-specific (never touched by updates)
 │   │   └── article.php
 │   ├── custom/            ← Site-specific overrides
@@ -82,43 +82,64 @@ Or for direct page access (backward compatible):
 require __DIR__ . '/core/pages/articles.php';
 ```
 
+## Using as Git Submodule
+
+Projects include pugo-core as a git submodule at `admin/core/`:
+
+```bash
+# Clone a project with submodules
+git clone --recursive https://github.com/your-org/my-site.git
+
+# Or if already cloned, initialize submodules
+git submodule update --init --recursive
+```
+
 ## Updating Projects
 
-When you release a new version:
+When pugo-core has updates:
 
-1. Tag a release on GitHub/GitLab
-2. Users run `./admin/core/pugo update`
-3. The entire `core/` folder is replaced
-4. Their `config.php`, `content_types/`, and `custom/` are untouched
+```bash
+cd my-site
+git submodule update --remote admin/core
+git add admin/core
+git commit -m "chore: update pugo-core"
+git push
+```
 
 ## What Survives Updates
 
 | Path | Updated? | Description |
 |------|----------|-------------|
-| `admin/core/` | ✅ YES | Replaced entirely |
+| `admin/core/` | ✅ YES | Submodule, tracks pugo-core |
 | `admin/config.php` | ❌ NO | Site configuration |
 | `admin/content_types/` | ❌ NO | Custom content types |
 | `admin/custom/` | ❌ NO | View overrides |
 
-## Releasing a New Version
+## Contributing Changes Back
 
-1. Update `PUGO_VERSION` in `src/bootstrap.php`
-2. Update `VERSION` file
-3. Create a GitHub/GitLab release with tag `vX.Y.Z`
-4. The CLI will fetch the latest release automatically
-
-## Development
+When you fix/improve core functionality from a project:
 
 ```bash
-# Clone this repo
-git clone https://github.com/your-org/pugo-core.git
+# Changes in admin/core/ are tracked by pugo-core
+cd admin/core
+git add .
+git commit -m "fix: your improvement"
+git push origin main
 
-# Make changes to src/
+# Then update the submodule reference in your project
+cd ../..
+git add admin/core
+git commit -m "chore: update pugo-core submodule"
+git push
+```
 
-# Test in a project by copying
-cp -r src/* /path/to/project/admin/core/
+## Releasing a New Version
 
-# Commit and tag
+1. Update `PUGO_VERSION` in `bootstrap.php`
+2. Update `VERSION` file
+3. Commit and tag:
+
+```bash
 git add .
 git commit -m "feat: add new feature"
 git tag v1.1.0
