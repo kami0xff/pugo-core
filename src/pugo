@@ -1,0 +1,520 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Pugo CLI - Command Line Tool
+ * 
+ * Commands:
+ *   version   - Show Pugo version
+ *   check     - Check for updates
+ *   update    - Update Pugo core
+ *   rollback  - Rollback to previous version
+ *   build     - Build Hugo site
+ *   publish   - Commit and push changes
+ */
+
+// Colors for terminal output
+define('C_RESET', "\033[0m");
+define('C_GREEN', "\033[32m");
+define('C_YELLOW', "\033[33m");
+define('C_RED', "\033[31m");
+define('C_CYAN', "\033[36m");
+define('C_BOLD', "\033[1m");
+
+// Paths
+define('PUGO_ROOT', __DIR__);
+define('PUGO_CORE', PUGO_ROOT . '/core');
+define('HUGO_ROOT', dirname(PUGO_ROOT));
+define('VERSION_FILE', PUGO_ROOT . '/.pugo-version');
+define('BACKUP_DIR', PUGO_ROOT . '/backups');
+
+// GitHub release URL (change this to your repo)
+define('GITHUB_REPO', 'your-org/pugo-core');
+define('GITHUB_API', 'https://api.github.com/repos/' . GITHUB_REPO . '/releases/latest');
+
+/**
+ * Print colored output
+ */
+function out(string $message, string $color = ''): void {
+    echo $color . $message . C_RESET . "\n";
+}
+
+/**
+ * Print a header
+ */
+function header_line(string $title): void {
+    out("\n" . C_BOLD . "═══ {$title} ═══" . C_RESET . "\n");
+}
+
+/**
+ * Get current Pugo version
+ */
+function get_version(): string {
+    if (file_exists(VERSION_FILE)) {
+        return trim(file_get_contents(VERSION_FILE));
+    }
+    
+    // Check bootstrap for version constant
+    $bootstrap = PUGO_CORE . '/bootstrap.php';
+    if (file_exists($bootstrap)) {
+        $content = file_get_contents($bootstrap);
+        if (preg_match("/define\('PUGO_VERSION',\s*'([^']+)'\)/", $content, $m)) {
+            return $m[1];
+        }
+    }
+    
+    return 'unknown';
+}
+
+/**
+ * Get latest version from GitHub
+ */
+function get_latest_version(): ?array {
+    $opts = [
+        'http' => [
+            'method' => 'GET',
+            'header' => [
+                'User-Agent: Pugo-CLI',
+                'Accept: application/vnd.github.v3+json'
+            ]
+        ]
+    ];
+    
+    $context = stream_context_create($opts);
+    $response = @file_get_contents(GITHUB_API, false, $context);
+    
+    if (!$response) {
+        return null;
+    }
+    
+    return json_decode($response, true);
+}
+
+/**
+ * Download and extract update
+ */
+function download_update(string $url, string $dest): bool {
+    out("  Downloading...", C_CYAN);
+    
+    $zip_file = sys_get_temp_dir() . '/pugo-update.zip';
+    $content = @file_get_contents($url);
+    
+    if (!$content) {
+        out("  Failed to download update", C_RED);
+        return false;
+    }
+    
+    file_put_contents($zip_file, $content);
+    
+    out("  Extracting...", C_CYAN);
+    
+    $zip = new ZipArchive();
+    if ($zip->open($zip_file) !== true) {
+        out("  Failed to open zip file", C_RED);
+        return false;
+    }
+    
+    // Extract to temp directory first
+    $temp_dir = sys_get_temp_dir() . '/pugo-core-' . time();
+    $zip->extractTo($temp_dir);
+    $zip->close();
+    
+    // Find the core directory in extracted files
+    $extracted_core = null;
+    foreach (scandir($temp_dir) as $item) {
+        if ($item[0] === '.') continue;
+        $path = $temp_dir . '/' . $item;
+        if (is_dir($path)) {
+            // Look for src/ or just use the directory
+            if (is_dir($path . '/src')) {
+                $extracted_core = $path . '/src';
+            } else {
+                $extracted_core = $path;
+            }
+            break;
+        }
+    }
+    
+    if (!$extracted_core) {
+        out("  Could not find core files in download", C_RED);
+        return false;
+    }
+    
+    // Copy to destination
+    out("  Installing...", C_CYAN);
+    
+    // Remove old core
+    if (is_dir($dest)) {
+        exec('rm -rf ' . escapeshellarg($dest));
+    }
+    
+    // Copy new core
+    exec('cp -r ' . escapeshellarg($extracted_core) . ' ' . escapeshellarg($dest));
+    
+    // Cleanup
+    @unlink($zip_file);
+    exec('rm -rf ' . escapeshellarg($temp_dir));
+    
+    return true;
+}
+
+/**
+ * Backup current core
+ */
+function backup_core(): ?string {
+    if (!is_dir(PUGO_CORE)) {
+        return null;
+    }
+    
+    if (!is_dir(BACKUP_DIR)) {
+        mkdir(BACKUP_DIR, 0755, true);
+    }
+    
+    $version = get_version();
+    $timestamp = date('Y-m-d-His');
+    $backup_name = "core-{$version}-{$timestamp}";
+    $backup_path = BACKUP_DIR . '/' . $backup_name;
+    
+    exec('cp -r ' . escapeshellarg(PUGO_CORE) . ' ' . escapeshellarg($backup_path));
+    
+    return $backup_path;
+}
+
+/**
+ * List available backups
+ */
+function list_backups(): array {
+    if (!is_dir(BACKUP_DIR)) {
+        return [];
+    }
+    
+    $backups = [];
+    foreach (scandir(BACKUP_DIR) as $item) {
+        if ($item[0] === '.') continue;
+        if (is_dir(BACKUP_DIR . '/' . $item)) {
+            $backups[] = $item;
+        }
+    }
+    
+    rsort($backups); // Most recent first
+    return $backups;
+}
+
+// =============================================================================
+// COMMANDS
+// =============================================================================
+
+/**
+ * Show version
+ */
+function cmd_version(): void {
+    $version = get_version();
+    out("\nPugo " . C_BOLD . "v{$version}" . C_RESET);
+    out("Core: " . PUGO_CORE);
+    out("Hugo: " . HUGO_ROOT);
+}
+
+/**
+ * Check for updates
+ */
+function cmd_check(): void {
+    header_line("Checking for Updates");
+    
+    $current = get_version();
+    out("Current version: " . C_BOLD . "v{$current}" . C_RESET);
+    
+    out("\nChecking GitHub...", C_CYAN);
+    $latest = get_latest_version();
+    
+    if (!$latest) {
+        out("Could not check for updates. Are you online?", C_YELLOW);
+        out("You can manually download from: https://github.com/" . GITHUB_REPO . "/releases");
+        return;
+    }
+    
+    $latest_version = ltrim($latest['tag_name'], 'v');
+    
+    if (version_compare($latest_version, $current, '>')) {
+        out("\n✨ New version available: " . C_GREEN . C_BOLD . "v{$latest_version}" . C_RESET);
+        out("\nChanges:");
+        $body = $latest['body'] ?? 'No release notes.';
+        out("  " . str_replace("\n", "\n  ", $body));
+        out("\nRun " . C_CYAN . "./pugo update" . C_RESET . " to update.");
+    } else {
+        out("\n✅ You're up to date!", C_GREEN);
+    }
+}
+
+/**
+ * Update Pugo core
+ */
+function cmd_update(): void {
+    global $argv;
+    
+    header_line("Updating Pugo Core");
+    
+    $current = get_version();
+    out("Current version: v{$current}");
+    
+    // Check for latest version
+    out("\nFetching latest release...", C_CYAN);
+    $latest = get_latest_version();
+    
+    if (!$latest) {
+        out("Could not fetch latest version. Check your internet connection.", C_RED);
+        return;
+    }
+    
+    $latest_version = ltrim($latest['tag_name'], 'v');
+    
+    if (version_compare($latest_version, $current, '<=') && !in_array('--force', $argv)) {
+        out("\n✅ Already up to date (v{$current})", C_GREEN);
+        out("Use --force to reinstall anyway.");
+        return;
+    }
+    
+    out("New version: " . C_GREEN . "v{$latest_version}" . C_RESET);
+    
+    // Find the zip download URL
+    $zip_url = null;
+    foreach ($latest['assets'] ?? [] as $asset) {
+        if (strpos($asset['name'], 'core') !== false && strpos($asset['name'], '.zip') !== false) {
+            $zip_url = $asset['browser_download_url'];
+            break;
+        }
+    }
+    
+    // Fall back to source zip
+    if (!$zip_url) {
+        $zip_url = $latest['zipball_url'];
+    }
+    
+    // Backup current core
+    out("\n📦 Backing up current core...", C_CYAN);
+    $backup = backup_core();
+    if ($backup) {
+        out("  Backed up to: " . basename($backup), C_GREEN);
+    }
+    
+    // Download and install
+    out("\n⬇️  Downloading update...", C_CYAN);
+    if (!download_update($zip_url, PUGO_CORE)) {
+        out("\n❌ Update failed!", C_RED);
+        if ($backup) {
+            out("Restoring backup...");
+            exec('rm -rf ' . escapeshellarg(PUGO_CORE));
+            exec('cp -r ' . escapeshellarg($backup) . ' ' . escapeshellarg(PUGO_CORE));
+            out("Restored from backup.", C_GREEN);
+        }
+        return;
+    }
+    
+    // Update version file
+    file_put_contents(VERSION_FILE, $latest_version);
+    
+    out("\n✅ Updated to v{$latest_version}!", C_GREEN);
+    out("\nYour config.php and content_types/ are unchanged.");
+    out("Your custom/ overrides are unchanged.");
+}
+
+/**
+ * Rollback to previous version
+ */
+function cmd_rollback(): void {
+    header_line("Rollback");
+    
+    $backups = list_backups();
+    
+    if (empty($backups)) {
+        out("No backups available.", C_YELLOW);
+        return;
+    }
+    
+    out("Available backups:\n");
+    foreach ($backups as $i => $backup) {
+        out("  [{$i}] {$backup}");
+    }
+    
+    out("\nWhich backup to restore? [0]: ", C_CYAN);
+    $choice = trim(fgets(STDIN)) ?: '0';
+    
+    if (!isset($backups[$choice])) {
+        out("Invalid choice.", C_RED);
+        return;
+    }
+    
+    $backup_path = BACKUP_DIR . '/' . $backups[$choice];
+    
+    out("\nRestoring from {$backups[$choice]}...", C_CYAN);
+    
+    // Remove current core
+    exec('rm -rf ' . escapeshellarg(PUGO_CORE));
+    
+    // Copy backup
+    exec('cp -r ' . escapeshellarg($backup_path) . ' ' . escapeshellarg(PUGO_CORE));
+    
+    out("✅ Restored!", C_GREEN);
+}
+
+/**
+ * Build Hugo site
+ */
+function cmd_build(): void {
+    header_line("Building Hugo Site");
+    
+    out("Running Hugo build...", C_CYAN);
+    
+    $output = [];
+    $code = 0;
+    exec('cd ' . escapeshellarg(HUGO_ROOT) . ' && hugo --minify 2>&1', $output, $code);
+    
+    echo implode("\n", $output) . "\n";
+    
+    if ($code === 0) {
+        out("\n✅ Build complete!", C_GREEN);
+        
+        // Run Pagefind if available
+        exec('which pagefind', $pf_out, $pf_code);
+        if ($pf_code === 0) {
+            out("\nRunning Pagefind...", C_CYAN);
+            exec('cd ' . escapeshellarg(HUGO_ROOT) . ' && pagefind --site public 2>&1', $pf_output, $pf_code);
+            echo implode("\n", $pf_output) . "\n";
+        }
+    } else {
+        out("\n❌ Build failed!", C_RED);
+    }
+}
+
+/**
+ * Publish changes (git commit + push)
+ */
+function cmd_publish(): void {
+    global $argv;
+    
+    header_line("Publishing Changes");
+    
+    // Get commit message
+    $message_index = array_search('-m', $argv);
+    $message = $message_index && isset($argv[$message_index + 1]) 
+        ? $argv[$message_index + 1]
+        : 'Content update from Pugo [' . date('Y-m-d H:i:s') . ']';
+    
+    out("Commit message: {$message}\n", C_CYAN);
+    
+    // Git status
+    exec('cd ' . escapeshellarg(HUGO_ROOT) . ' && git status --porcelain 2>&1', $status_output);
+    
+    if (empty(array_filter($status_output))) {
+        out("No changes to publish.", C_YELLOW);
+        return;
+    }
+    
+    out("Changes:");
+    foreach ($status_output as $line) {
+        $line = trim($line);
+        if ($line) {
+            $status = substr($line, 0, 2);
+            $file = trim(substr($line, 2));
+            $color = $status === '??' ? C_GREEN : ($status[0] === 'D' ? C_RED : C_YELLOW);
+            out("  {$color}{$status}{C_RESET} {$file}");
+        }
+    }
+    
+    // Git add
+    out("\nStaging changes...", C_CYAN);
+    exec('cd ' . escapeshellarg(HUGO_ROOT) . ' && git add -A 2>&1', $add_output, $add_code);
+    
+    // Git commit
+    out("Committing...", C_CYAN);
+    exec('cd ' . escapeshellarg(HUGO_ROOT) . ' && git commit -m ' . escapeshellarg($message) . ' 2>&1', $commit_output, $commit_code);
+    
+    // Git push
+    out("Pushing...", C_CYAN);
+    exec('cd ' . escapeshellarg(HUGO_ROOT) . ' && git push 2>&1', $push_output, $push_code);
+    
+    if ($push_code === 0) {
+        out("\n✅ Published! CI/CD pipeline should be triggered.", C_GREEN);
+    } else {
+        out("\n❌ Push failed!", C_RED);
+        echo implode("\n", $push_output) . "\n";
+    }
+}
+
+/**
+ * Show help
+ */
+function cmd_help(): void {
+    out(C_BOLD . "
+╔═══════════════════════════════════════════════════════════════╗
+║                         PUGO CLI                               ║
+╚═══════════════════════════════════════════════════════════════╝" . C_RESET . "
+
+" . C_BOLD . "Usage:" . C_RESET . " ./pugo <command> [options]
+
+" . C_BOLD . "Commands:" . C_RESET . "
+  " . C_CYAN . "version" . C_RESET . "     Show Pugo version and paths
+  " . C_CYAN . "check" . C_RESET . "       Check for available updates
+  " . C_CYAN . "update" . C_RESET . "      Update Pugo core to latest version
+  " . C_CYAN . "rollback" . C_RESET . "    Restore a previous version from backup
+  " . C_CYAN . "build" . C_RESET . "       Build the Hugo site locally
+  " . C_CYAN . "publish" . C_RESET . "     Commit and push changes to trigger CI/CD
+
+" . C_BOLD . "Options:" . C_RESET . "
+  " . C_CYAN . "-m <msg>" . C_RESET . "    Commit message for publish command
+  " . C_CYAN . "--force" . C_RESET . "     Force update even if already up to date
+
+" . C_BOLD . "Examples:" . C_RESET . "
+  ./pugo version
+  ./pugo update
+  ./pugo publish -m \"Added new article\"
+  ./pugo build
+
+" . C_BOLD . "Files that survive updates:" . C_RESET . "
+  • config.php           (your configuration)
+  • content_types/       (your content types)
+  • custom/              (your view overrides)
+");
+}
+
+// =============================================================================
+// MAIN
+// =============================================================================
+
+$command = $argv[1] ?? 'help';
+
+switch ($command) {
+    case 'version':
+    case '-v':
+    case '--version':
+        cmd_version();
+        break;
+        
+    case 'check':
+        cmd_check();
+        break;
+        
+    case 'update':
+        cmd_update();
+        break;
+        
+    case 'rollback':
+        cmd_rollback();
+        break;
+        
+    case 'build':
+        cmd_build();
+        break;
+        
+    case 'publish':
+        cmd_publish();
+        break;
+        
+    case 'help':
+    case '-h':
+    case '--help':
+    default:
+        cmd_help();
+        break;
+}
+
+echo "\n";
+

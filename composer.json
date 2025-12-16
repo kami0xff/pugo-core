@@ -1,0 +1,30 @@
+{
+    "name": "pugo/core",
+    "description": "Pugo - PHP Admin Panel for Hugo Static Sites",
+    "keywords": ["hugo", "cms", "admin", "static-site", "markdown"],
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Your Name",
+            "email": "your@email.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Pugo\\": "src/"
+        },
+        "files": [
+            "src/bootstrap.php"
+        ]
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.0-dev"
+        }
+    }
+}
+
