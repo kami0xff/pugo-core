@@ -22,8 +22,9 @@ final readonly class BuildHugoAction
      * Build the Hugo site
      * 
      * @param bool $runPagefind Whether to run Pagefind after build
+     * @param string|null $baseURL Override baseURL for preview (e.g., '/preview/')
      */
-    public function handle(bool $runPagefind = true): ActionResult
+    public function handle(bool $runPagefind = true, ?string $baseURL = null): ActionResult
     {
         $output = [];
         $returnCode = 0;
@@ -36,8 +37,14 @@ final readonly class BuildHugoAction
                 exec('chmod -R 775 ' . escapeshellarg($publicDir) . ' 2>&1');
             }
 
+            // Build command with optional baseURL override for preview
+            $buildCommand = $this->hugoCommand;
+            if ($baseURL !== null) {
+                $buildCommand .= ' --baseURL ' . escapeshellarg($baseURL);
+            }
+
             // Change to Hugo root and build
-            $command = 'cd ' . escapeshellarg($this->hugoRoot) . ' && ' . $this->hugoCommand . ' 2>&1';
+            $command = 'cd ' . escapeshellarg($this->hugoRoot) . ' && ' . $buildCommand . ' 2>&1';
             exec($command, $output, $returnCode);
 
             if ($returnCode !== 0) {

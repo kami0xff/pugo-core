@@ -24,11 +24,9 @@ class ContentTypeManager {
     
     /**
      * Load all content type definitions from the content_types directory
-     * content_types/ is at admin root level, not inside core/
      */
     private function loadContentTypes(): void {
-        // Go up 2 levels from includes/ to admin/, then into content_types/
-        $typesDir = dirname(__DIR__, 2) . '/content_types';
+        $typesDir = dirname(__DIR__) . '/content_types';
         
         if (!is_dir($typesDir)) {
             return;

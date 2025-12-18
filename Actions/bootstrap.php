@@ -35,10 +35,20 @@ require_once __DIR__ . '/Media/DeleteMediaAction.php';
 require_once __DIR__ . '/Build/BuildHugoAction.php';
 require_once __DIR__ . '/Build/PublishAction.php';
 
+// Load Translation Actions
+if (file_exists(__DIR__ . '/Translations/ScanTranslationsAction.php')) {
+    require_once __DIR__ . '/Translations/ScanTranslationsAction.php';
+}
+if (file_exists(__DIR__ . '/Translations/CreateTranslationAction.php')) {
+    require_once __DIR__ . '/Translations/CreateTranslationAction.php';
+}
+
 use Pugo\Actions\Tags\{ListTagsAction, RenameTagAction, MergeTagsAction, DeleteTagAction};
 use Pugo\Actions\Content\{ListContentAction, GetContentAction, CreateContentAction, UpdateContentAction, DeleteContentAction};
 use Pugo\Actions\Media\{ListMediaAction, UploadMediaAction, DeleteMediaAction};
 use Pugo\Actions\Build\{BuildHugoAction, PublishAction};
+use Pugo\Actions\Translations\ScanTranslationsAction;
+use Pugo\Actions\Translations\CreateTranslationAction;
 
 /**
  * Action Factory
@@ -186,6 +196,36 @@ class Actions
             self::$hugoRoot ?? HUGO_ROOT,
             $config['git_user_name'] ?? 'Pugo Admin',
             $config['git_user_email'] ?? 'admin@pugo.local'
+        );
+    }
+
+    // === Translation Actions ===
+
+    public static function scanTranslations(): ?ScanTranslationsAction
+    {
+        global $config;
+        
+        if (!class_exists(ScanTranslationsAction::class)) {
+            return null;
+        }
+        
+        return new ScanTranslationsAction(
+            self::$hugoRoot ?? HUGO_ROOT,
+            $config['languages'] ?? ['en' => ['name' => 'English', 'flag' => '🇬🇧', 'content_dir' => 'content']]
+        );
+    }
+
+    public static function createTranslation(): ?CreateTranslationAction
+    {
+        global $config;
+        
+        if (!class_exists(CreateTranslationAction::class)) {
+            return null;
+        }
+        
+        return new CreateTranslationAction(
+            self::$hugoRoot ?? HUGO_ROOT,
+            $config['languages'] ?? ['en' => ['name' => 'English', 'flag' => '🇬🇧', 'content_dir' => 'content']]
         );
     }
 }
