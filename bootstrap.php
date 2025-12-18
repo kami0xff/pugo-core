@@ -7,7 +7,7 @@
  */
 
 // Version info
-define('PUGO_VERSION', '1.0.0');
+define('PUGO_VERSION', '2.0.0');
 
 // Prevent direct access
 if (!defined('PUGO_ROOT')) {
@@ -44,6 +44,9 @@ if (!defined('ADMIN_ROOT')) {
     define('ADMIN_ROOT', PUGO_ROOT);
 }
 
+// Load PSR-4 autoloader for Pugo namespace
+require_once PUGO_CORE . '/autoload.php';
+
 // Load core includes
 require_once PUGO_CORE . '/includes/functions.php';
 require_once PUGO_CORE . '/includes/ContentType.php';
@@ -51,6 +54,127 @@ require_once PUGO_CORE . '/includes/auth.php';
 
 // Load Actions
 require_once PUGO_CORE . '/Actions/bootstrap.php';
+
+// Initialize Registry with defaults
+use Pugo\Registry\Registry;
+
+$registry = Registry::getInstance();
+
+// Register default content types
+$registry->registerContentType('article', [
+    'name' => 'Article',
+    'icon' => 'file-text',
+    'description' => 'Standard articles, documentation, and blog posts',
+    'sections' => ['*'],
+    'fields' => [
+        'title' => ['type' => 'text', 'required' => true, 'label' => 'Title'],
+        'description' => ['type' => 'textarea', 'required' => true, 'label' => 'Description'],
+        'date' => ['type' => 'date', 'required' => true, 'label' => 'Date'],
+        'draft' => ['type' => 'checkbox', 'label' => 'Draft'],
+    ],
+]);
+
+// Register default data editors
+$registry->registerDataEditor('faqs', [
+    'name' => 'FAQ Editor',
+    'icon' => 'help-circle',
+    'description' => 'Manage frequently asked questions',
+    'editor_class' => \Pugo\DataEditors\SimpleListEditor::class,
+    'data_file' => 'faqs',
+    'data_format' => 'grouped',
+    'fields' => [
+        'question' => ['type' => 'text', 'label' => 'Question', 'required' => true],
+        'answer' => ['type' => 'textarea', 'label' => 'Answer', 'required' => true],
+    ],
+    'preview_type' => 'qa',
+    'item_name' => 'question',
+    'item_name_plural' => 'questions',
+]);
+
+$registry->registerDataEditor('topics', [
+    'name' => 'Topics Editor',
+    'icon' => 'book',
+    'description' => 'Quick access topics for sections',
+    'editor_class' => \Pugo\DataEditors\GroupedListEditor::class,
+    'data_file' => 'topics',
+    'fields' => [
+        'title' => ['type' => 'text', 'label' => 'Title', 'required' => true],
+        'desc' => ['type' => 'text', 'label' => 'Description'],
+        'url' => ['type' => 'text', 'label' => 'URL', 'placeholder' => '/section/page/'],
+    ],
+    'item_name' => 'topic',
+    'item_name_plural' => 'topics',
+]);
+
+$registry->registerDataEditor('tutorials', [
+    'name' => 'Tutorials Editor',
+    'icon' => 'video',
+    'description' => 'Video tutorials with categories',
+    'editor_class' => \Pugo\DataEditors\SimpleListEditor::class,
+    'data_file' => 'all_tutorials',
+    'fields' => [
+        'title' => ['type' => 'text', 'label' => 'Title', 'required' => true],
+        'description' => ['type' => 'textarea', 'label' => 'Description'],
+        'duration' => ['type' => 'text', 'label' => 'Duration', 'placeholder' => '3:45'],
+        'video' => ['type' => 'url', 'label' => 'Video URL'],
+        'category' => ['type' => 'select', 'label' => 'Category', 'options' => []],
+        'featured' => ['type' => 'checkbox', 'label' => 'Featured'],
+    ],
+    'item_name' => 'tutorial',
+    'item_name_plural' => 'tutorials',
+]);
+
+$registry->registerDataEditor('quickaccess', [
+    'name' => 'Quick Access Editor',
+    'icon' => 'zap',
+    'description' => 'Homepage quick access buttons',
+    'editor_class' => \Pugo\DataEditors\SimpleListEditor::class,
+    'data_file' => 'quickaccess',
+    'fields' => [
+        'title' => ['type' => 'text', 'label' => 'Title', 'required' => true],
+        'icon' => ['type' => 'select', 'label' => 'Icon', 'options' => []],
+        'glow' => ['type' => 'select', 'label' => 'Glow Effect', 'options' => []],
+        'url' => ['type' => 'text', 'label' => 'URL', 'placeholder' => '/section/page/'],
+    ],
+    'item_name' => 'button',
+    'item_name_plural' => 'buttons',
+]);
+
+// Register default admin pages
+$registry->registerPage('dashboard', [
+    'name' => 'Dashboard',
+    'icon' => 'home',
+    'nav_group' => 'main',
+    'nav_order' => 10,
+]);
+
+$registry->registerPage('articles', [
+    'name' => 'Articles',
+    'icon' => 'file-text',
+    'nav_group' => 'main',
+    'nav_order' => 20,
+]);
+
+$registry->registerPage('media', [
+    'name' => 'Media',
+    'icon' => 'image',
+    'nav_group' => 'main',
+    'nav_order' => 30,
+]);
+
+$registry->registerPage('components', [
+    'name' => 'Site Components',
+    'icon' => 'grid',
+    'nav_group' => 'data',
+    'nav_order' => 10,
+]);
+
+$registry->registerPage('settings', [
+    'name' => 'Settings',
+    'icon' => 'settings',
+    'nav_group' => 'settings',
+    'nav_order' => 100,
+]);
 
 /**
  * Find a view file, checking custom folder first
@@ -118,7 +242,7 @@ function pugo_config(): array {
             'site_name' => 'My Site',
             'default_language' => 'en',
             'languages' => [
-                'en' => ['name' => 'English', 'flag' => '🇬🇧', 'content_dir' => 'content'],
+                'en' => ['name' => 'English', 'flag' => '🇬🇧', 'suffix' => '', 'data_suffix' => ''],
             ],
             'auth' => [
                 'enabled' => true,
@@ -187,3 +311,30 @@ function pugo_require_auth(): void {
     }
 }
 
+/**
+ * Get the registry instance
+ */
+function pugo_registry(): Registry {
+    return Registry::getInstance();
+}
+
+/**
+ * Create a data editor from registry configuration
+ */
+function pugo_create_editor(string $key, array $overrides = []): ?\Pugo\DataEditors\BaseDataEditor {
+    $registry = Registry::getInstance();
+    $editorConfig = $registry->getDataEditor($key);
+    
+    if (!$editorConfig) {
+        return null;
+    }
+    
+    $config = array_merge($editorConfig, $overrides);
+    $class = $config['editor_class'] ?? \Pugo\DataEditors\SimpleListEditor::class;
+    
+    if (!class_exists($class)) {
+        return null;
+    }
+    
+    return new $class($config);
+}
