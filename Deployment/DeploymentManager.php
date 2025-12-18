@@ -29,11 +29,6 @@ class DeploymentManager
     protected function registerDefaultAdapters(): void
     {
         $this->register(new Adapters\GitAdapter());
-        $this->register(new Adapters\NetlifyAdapter());
-        $this->register(new Adapters\VercelAdapter());
-        $this->register(new Adapters\CloudflareAdapter());
-        $this->register(new Adapters\RsyncAdapter());
-        $this->register(new Adapters\S3Adapter());
     }
     
     /**

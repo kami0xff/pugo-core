@@ -7,7 +7,7 @@
  */
 
 // Version info
-define('PUGO_VERSION', '2.0.0');
+define('PUGO_VERSION', '3.0.0-lean');
 
 // Prevent direct access
 if (!defined('PUGO_ROOT')) {

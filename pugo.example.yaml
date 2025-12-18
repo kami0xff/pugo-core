@@ -1,357 +1,64 @@
 # =============================================================================
-# PUGO CONFIGURATION
+# Pugo Configuration Example
 # =============================================================================
-# This is the single source of truth for your Pugo-powered Hugo site.
-# Copy this file to your project root as `pugo.yaml` and customize.
-#
-# Documentation: https://pugo.dev/docs/configuration
+# Copy this to your project root as pugo.yaml and customize
 # =============================================================================
 
-# -----------------------------------------------------------------------------
-# SITE SETTINGS
-# -----------------------------------------------------------------------------
 site:
-  name: "My Awesome Site"
+  name: "My Hugo Site"
   url: "https://example.com"
-  description: "A site built with Pugo"
-  default_language: en
 
-# -----------------------------------------------------------------------------
-# LANGUAGES
-# -----------------------------------------------------------------------------
-# Define all languages your site supports.
-# The 'suffix' is appended to data files (e.g., faqs_fr.yaml)
+# Languages
 languages:
   en:
     name: English
-    flag: 🇬🇧
-    suffix: ""
+    flag: "🇬🇧"
+    default: true
   fr:
     name: Français
-    flag: 🇫🇷
-    suffix: "_fr"
-  de:
-    name: Deutsch
-    flag: 🇩🇪
-    suffix: "_de"
+    flag: "🇫🇷"
 
-# -----------------------------------------------------------------------------
-# CONTENT SECTIONS
-# -----------------------------------------------------------------------------
-# Define sections for your content (maps to /content/{section}/)
+# Content sections (auto-discovered from content/ folder if not specified)
 sections:
-  users:
-    name: Users
-    color: "#3b82f6"
-    content_type: article
-  models:
-    name: Models
-    color: "#ec4899"
-    content_type: article
-  studios:
-    name: Studios
-    color: "#8b5cf6"
-    content_type: article
+  posts:
+    name: Blog Posts
+    path: content/posts
+    icon: "📝"
+  pages:
+    name: Pages
+    path: content
+    icon: "📄"
 
-# -----------------------------------------------------------------------------
-# CONTENT TYPES
-# -----------------------------------------------------------------------------
-# Define different content types with their frontmatter fields.
-content_types:
-  article:
-    name: Article
-    icon: file-text
-    fields:
-      title:
-        type: text
-        label: Title
-        required: true
-      description:
-        type: textarea
-        label: Description
-        required: true
-      date:
-        type: date
-        label: Date
-        required: true
-      draft:
-        type: checkbox
-        label: Draft
-      weight:
-        type: number
-        label: Weight
-        help: "Lower numbers appear first"
-      image:
-        type: image
-        label: Featured Image
-
-  tutorial:
-    name: Tutorial
-    icon: book-open
-    fields:
-      title:
-        type: text
-        required: true
-      description:
-        type: textarea
-      video_url:
-        type: url
-        label: Video URL
-      difficulty:
-        type: select
-        options:
-          beginner: Beginner
-          intermediate: Intermediate
-          advanced: Advanced
-      duration:
-        type: text
-        label: Duration
-        placeholder: "5 min read"
-
-# -----------------------------------------------------------------------------
-# DATA TYPES
-# -----------------------------------------------------------------------------
-# Define YAML data files and their editors.
-# These appear in the admin sidebar under "Data".
+# Data types (for YAML data file editing)
 data_types:
   faqs:
     name: FAQs
-    icon: help-circle
-    editor: simple-list
-    file: faqs
+    file: data/faqs.yaml
+    editor: SimpleListEditor
     fields:
-      question:
-        type: text
-        label: Question
-        required: true
-      answer:
-        type: textarea
-        label: Answer
-        required: true
+      - { name: question, type: text, label: Question, required: true }
+      - { name: answer, type: textarea, label: Answer, required: true }
 
-  topics:
-    name: Topics
-    icon: compass
-    editor: grouped-list
-    file: topics
-    group_by: section
+  menu:
+    name: Navigation Menu
+    file: data/menu.yaml
+    editor: SimpleListEditor
     fields:
-      title:
-        type: text
-        label: Title
-        required: true
-      desc:
-        type: textarea
-        label: Description
-      url:
-        type: text
-        label: URL
+      - { name: title, type: text, label: Title }
+      - { name: url, type: text, label: URL }
+      - { name: weight, type: number, label: Order }
 
-  testimonials:
-    name: Testimonials
-    icon: message-circle
-    editor: simple-list
-    file: testimonials
-    fields:
-      name:
-        type: text
-        label: Name
-        required: true
-      role:
-        type: text
-        label: Role/Company
-      quote:
-        type: textarea
-        label: Quote
-        required: true
-      avatar:
-        type: image
-        label: Avatar
-
-  team:
-    name: Team Members
-    icon: users
-    editor: simple-list
-    file: team
-    fields:
-      name:
-        type: text
-        required: true
-      role:
-        type: text
-      bio:
-        type: textarea
-      photo:
-        type: image
-      twitter:
-        type: url
-      linkedin:
-        type: url
-
-# -----------------------------------------------------------------------------
-# BLOCKS (Page Builder)
-# -----------------------------------------------------------------------------
-# Define custom blocks for the visual page builder.
-# Built-in blocks: hero, features, testimonials, faq, pricing, cta, etc.
-blocks:
-  quick-access:
-    name: Quick Access
-    icon: zap
-    category: layout
-    partial: blocks/quick-access.html
-    fields:
-      title:
-        type: text
-        label: Section Title
-      items:
-        type: repeater
-        fields:
-          title:
-            type: text
-          icon:
-            type: icon
-          url:
-            type: text
-          glow:
-            type: select
-            options:
-              blue: Blue
-              green: Green
-              orange: Orange
-              purple: Purple
-
-# -----------------------------------------------------------------------------
-# DEPLOYMENT
-# -----------------------------------------------------------------------------
-# Configure how your site is deployed.
-deployment:
-  # Active method: git, netlify, vercel, cloudflare, rsync, s3
-  method: git
-
-  # Git CI/CD (recommended)
-  git:
-    enabled: true
-    branch: main
-    remote: origin
-    auto_commit: false
-    commit_template: "content: {action} - {date}"
-    trigger_pipeline: true
-    
-    # GitLab specific
-    platform: gitlab
-    gitlab:
-      url: https://gitlab.com
-      project_id: "12345"
-      # trigger_token loaded from env: GITLAB_TRIGGER_TOKEN
-
-  # Netlify (alternative or for previews)
-  netlify:
-    enabled: false
-    site_id: ""
-    # auth_token loaded from env: NETLIFY_AUTH_TOKEN
-    deploy_hook: ""
-
-  # Vercel (alternative or for previews)
-  vercel:
-    enabled: false
-    project_id: ""
-    team_id: ""
-    # token loaded from env: VERCEL_TOKEN
-
-  # Cloudflare Pages
-  cloudflare:
-    enabled: false
-    account_id: ""
-    project_name: ""
-    # api_token loaded from env: CF_API_TOKEN
-
-  # Rsync/SSH (traditional servers)
-  rsync:
-    enabled: false
-    host: ""
-    user: ""
-    path: /var/www/mysite
-    port: 22
-
-  # AWS S3
-  s3:
-    enabled: false
-    bucket: ""
-    region: us-east-1
-    cloudfront_id: ""
-
-# -----------------------------------------------------------------------------
-# FEATURES
-# -----------------------------------------------------------------------------
-# Enable or disable Pugo features.
-features:
-  page_builder: true
-  media_library: true
-  seo_tools: true
-  analytics: false
-  search: true
-
-# -----------------------------------------------------------------------------
-# AUTHENTICATION
-# -----------------------------------------------------------------------------
+# Authentication
 auth:
+  username: admin
+  # Generate with: php -r "echo password_hash('yourpassword', PASSWORD_DEFAULT);"
+  password_hash: "$2y$10$..."
+
+# Git deployment
+git:
   enabled: true
-  session_lifetime: 86400  # 24 hours
-  # Credentials can be set here or in environment variables
-  # username: admin
-  # password_hash: "$2y$..."
+  auto_commit: false
 
-# -----------------------------------------------------------------------------
-# PLUGINS
-# -----------------------------------------------------------------------------
-# Enable and configure plugins.
-plugins:
-  # seo:
-  #   enabled: true
-  #   class: Pugo\Plugins\SEOPlugin
-  #   config:
-  #     default_og_image: /images/og-default.jpg
-
-# -----------------------------------------------------------------------------
-# DASHBOARD
-# -----------------------------------------------------------------------------
-# Customize the admin dashboard layout.
-dashboard:
-  layout:
-    row1:
-      - quick-stats
-    row2:
-      - quick-actions
-      - git-status
-    row3:
-      - recent-activity
-      - recent-pages
-    row4:
-      - site-health
-      - deployment-status
-
-# -----------------------------------------------------------------------------
-# ENVIRONMENTS
-# -----------------------------------------------------------------------------
-# Override settings per environment.
-environments:
-  production:
-    site:
-      url: https://example.com
-    deployment:
-      method: git
-      git:
-        branch: main
-
-  staging:
-    site:
-      url: https://staging.example.com
-    deployment:
-      method: netlify
-
-  development:
-    site:
-      url: http://localhost:1313
-    features:
-      analytics: false
-
+# Hugo build command
+hugo:
+  command: "hugo --minify"

@@ -147,14 +147,6 @@ class PugoConfig
     }
     
     /**
-     * Get blocks configuration
-     */
-    public function blocks(): array
-    {
-        return $this->get('blocks', []);
-    }
-    
-    /**
      * Get deployment configuration
      */
     public function deployment(): array
@@ -168,14 +160,6 @@ class PugoConfig
     public function deploymentMethod(): string
     {
         return $this->get('deployment.method', 'git');
-    }
-    
-    /**
-     * Get plugins configuration
-     */
-    public function plugins(): array
-    {
-        return $this->get('plugins', []);
     }
     
     /**
@@ -243,8 +227,6 @@ class PugoConfig
             
             'data_types' => [],
             
-            'blocks' => [],
-            
             'deployment' => [
                 'method' => 'git',
                 'git' => [
@@ -252,15 +234,6 @@ class PugoConfig
                     'branch' => 'main',
                     'auto_commit' => false,
                 ],
-            ],
-            
-            'plugins' => [],
-            
-            'features' => [
-                'page_builder' => true,
-                'media_library' => true,
-                'seo_tools' => true,
-                'analytics' => false,
             ],
             
             'auth' => [
