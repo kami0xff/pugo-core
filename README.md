@@ -1,269 +1,276 @@
-# Pugo Core 2.0
+# 🚀 Pugo Core 3.0
 
-A powerful, modular admin panel engine for Hugo static sites.
+**The Ultimate Hugo Admin Panel** - A powerful, extensible admin system for Hugo static sites.
 
-## 🚀 Features
-
-- **Registry System** - Enable/disable sections, content types, and data editors
-- **Pre-built Data Editors** - FAQs, Topics, Tutorials, Quick Access, and more
-- **Reusable UI Components** - Cards, Tabs, Form Fields, Save Bar, Toast notifications
-- **Multi-language Support** - Built-in translation management
-- **Live Preview** - See changes in real-time
-- **Git Submodule Ready** - Easy updates across projects
-
-## 📦 Installation
-
-### As Git Submodule (Recommended)
-
-```bash
-# In your Hugo project's admin folder
-git submodule add https://git.example.com/pugo-core.git admin/core
+```
+██████╗ ██╗   ██╗ ██████╗  ██████╗ 
+██╔══██╗██║   ██║██╔════╝ ██╔═══██╗
+██████╔╝██║   ██║██║  ███╗██║   ██║
+██╔═══╝ ██║   ██║██║   ██║██║   ██║
+██║     ╚██████╔╝╚██████╔╝╚██████╔╝
+╚═╝      ╚═════╝  ╚═════╝  ╚═════╝  v3.0
 ```
 
-### Manual Installation
+## ✨ What's New in 3.0
 
-Copy the `pugo-core` directory to `admin/core` in your project.
+- **📦 Block System** - Visual page builder with drag-and-drop blocks
+- **🚀 Multi-Deployment** - Deploy to Git, Netlify, Vercel, Cloudflare, S3, or your own server
+- **🔌 Plugin Architecture** - Extend Pugo with custom plugins
+- **⚡ CLI Tool** - Scaffold blocks, data types, and plugins from command line
+- **📊 Dashboard Widgets** - Customizable dashboard with live stats
+- **📝 Single Config** - All settings in one `pugo.yaml` file
 
-## 🏗️ Architecture
+## 📖 Quick Start
+
+### Installation
+
+```bash
+# Clone into your Hugo project
+git clone https://github.com/your-org/pugo-core.git admin/core
+
+# Or use as submodule (recommended)
+git submodule add https://github.com/your-org/pugo-core.git admin/core
+```
+
+### Initialize a New Project
+
+```bash
+./admin/core/bin/pugo init my-site
+cd my-site
+./admin/core/bin/pugo serve
+```
+
+## 🎯 Features
+
+### 📝 Content Management
+- Multi-language support with flag indicators
+- Section-based content organization
+- Custom content types with configurable fields
+- WYSIWYG and Markdown editors
+- Media library with drag-and-drop upload
+
+### 📦 Visual Page Builder
+- 15+ built-in blocks (Hero, Features, Testimonials, FAQ, Pricing, etc.)
+- Custom block creation via Hugo partials
+- Drag-and-drop section ordering
+- Live preview
+
+### 🚀 Multi-Platform Deployment
+
+| Platform | Method | Best For |
+|----------|--------|----------|
+| Git CI/CD | Push → Pipeline | Production, full control |
+| Netlify | API / Hook | JAMstack, instant previews |
+| Vercel | API | Edge functions, previews |
+| Cloudflare | API | Global CDN, Workers |
+| AWS S3 | CLI sync | Enterprise, CloudFront |
+| Rsync/SSH | Direct upload | Traditional VPS |
+
+### 🔌 Plugin System
+- Event-driven architecture
+- Custom hooks and filters
+- WordPress-like API
+- Easy plugin creation
+
+### 📊 Dashboard
+- Quick stats overview
+- Git status integration
+- Recent activity feed
+- Site health checks
+- Deployment status
+- Customizable widget layout
+
+## 📁 Architecture
 
 ```
 pugo-core/
-├── Actions/              # Business logic (build, publish, etc.)
-├── Components/           # Reusable UI components
+├── bin/
+│   └── pugo              # CLI tool
+├── Blocks/
+│   └── BlockRegistry.php # Visual blocks for page builder
+├── CLI/
+│   └── PugoCLI.php      # Command-line interface
+├── Components/
 │   ├── Card.php
 │   ├── Tabs.php
 │   ├── Toast.php
 │   ├── SaveBar.php
-│   ├── EmptyState.php
-│   └── FormFields/
-│       ├── TextField.php
-│       ├── TextareaField.php
-│       ├── SelectField.php
-│       └── CheckboxField.php
-├── DataEditors/          # Pre-built data editors
+│   └── FormFields/      # Text, Textarea, Select, Checkbox
+├── Config/
+│   └── PugoConfig.php   # pugo.yaml parser
+├── Dashboard/
+│   ├── DashboardManager.php
+│   ├── Widget.php
+│   └── Widgets/         # Built-in widgets
+├── DataEditors/
 │   ├── BaseDataEditor.php
-│   ├── SimpleListEditor.php    # For FAQs, quick access, etc.
-│   └── GroupedListEditor.php   # For topics (with sections)
-├── Registry/             # Configuration registry
-│   └── Registry.php
-├── includes/             # Core includes
-├── pages/               # Example admin pages
-├── assets/              # CSS/JS assets
-├── autoload.php         # PSR-4 autoloader
-└── bootstrap.php        # Main entry point
+│   ├── SimpleListEditor.php
+│   └── GroupedListEditor.php
+├── Deployment/
+│   ├── DeploymentManager.php
+│   ├── DeploymentAdapter.php
+│   └── Adapters/        # Git, Netlify, Vercel, etc.
+├── PageBuilder/
+│   ├── PageBuilder.php
+│   └── PageLayout.php
+├── Plugins/
+│   ├── PluginManager.php
+│   └── Plugin.php
+├── autoload.php
+├── bootstrap.php
+└── pugo.example.yaml
 ```
 
-## 🎯 Quick Start
-
-### 1. Create a Data Editor Page
-
-**Before (800+ lines):**
-```php
-<?php
-// Hundreds of lines of parsing, saving, UI code...
-```
-
-**After (35 lines!):**
-```php
-<?php
-define('HUGO_ADMIN', true);
-define('PUGO_ROOT', __DIR__);
-
-$config = require 'config.php';
-require 'core/bootstrap.php';
-require_auth();
-
-$editor = pugo_create_editor('faqs', [
-    'title' => 'FAQ Editor',
-    'languages' => $config['languages'],
-]);
-
-$editor->handleRequest();
-
-require 'core/includes/header.php';
-$editor->render();
-require 'core/includes/footer.php';
-```
-
-### 2. Custom Data Editor
-
-```php
-<?php
-use Pugo\DataEditors\SimpleListEditor;
-
-$editor = new SimpleListEditor([
-    'title' => 'Testimonials',
-    'subtitle' => 'Manage customer testimonials',
-    'data_file' => 'testimonials',
-    
-    'fields' => [
-        'name' => ['type' => 'text', 'label' => 'Name', 'required' => true],
-        'company' => ['type' => 'text', 'label' => 'Company'],
-        'quote' => ['type' => 'textarea', 'label' => 'Quote', 'required' => true],
-        'rating' => ['type' => 'select', 'label' => 'Rating', 'options' => [
-            '5' => '⭐⭐⭐⭐⭐',
-            '4' => '⭐⭐⭐⭐',
-            '3' => '⭐⭐⭐',
-        ]],
-        'featured' => ['type' => 'checkbox', 'label' => 'Featured'],
-    ],
-    
-    'item_name' => 'testimonial',
-    'item_name_plural' => 'testimonials',
-]);
-```
-
-### 3. Grouped Data Editor (with sections)
-
-```php
-<?php
-use Pugo\DataEditors\GroupedListEditor;
-
-$editor = new GroupedListEditor([
-    'title' => 'Topics Editor',
-    'data_file' => 'topics',
-    
-    'sections' => [
-        'users' => ['name' => 'Users', 'color' => '#3b82f6'],
-        'models' => ['name' => 'Models', 'color' => '#ec4899'],
-        'studios' => ['name' => 'Studios', 'color' => '#8b5cf6'],
-    ],
-    
-    'fields' => [
-        'title' => ['type' => 'text', 'label' => 'Title', 'required' => true],
-        'desc' => ['type' => 'text', 'label' => 'Description'],
-        'url' => ['type' => 'text', 'label' => 'URL'],
-    ],
-]);
-```
-
-## 📋 Registry System
-
-The Registry allows you to configure which features are available:
-
-```php
-<?php
-use Pugo\Registry\Registry;
-
-$registry = Registry::getInstance();
-
-// Register a custom data editor
-$registry->registerDataEditor('pricing', [
-    'name' => 'Pricing Editor',
-    'icon' => 'dollar-sign',
-    'editor_class' => \Pugo\DataEditors\SimpleListEditor::class,
-    'data_file' => 'pricing',
-    'fields' => [
-        'name' => ['type' => 'text', 'label' => 'Plan Name'],
-        'price' => ['type' => 'number', 'label' => 'Price'],
-        'features' => ['type' => 'textarea', 'label' => 'Features'],
-    ],
-]);
-
-// Enable/disable features via config
-$registry->configure([
-    'data_editors' => [
-        'faqs' => true,
-        'topics' => true,
-        'tutorials' => false,  // Disable for this project
-    ],
-    'sections' => [
-        'users' => ['name' => 'Users', 'color' => '#3b82f6'],
-        'models' => false,  // Disable this section
-    ],
-]);
-```
-
-## 🎨 UI Components
-
-### Card
-
-```php
-use Pugo\Components\Card;
-
-$card = new Card([
-    'title' => 'My Card',
-    'icon' => 'file-text',
-    'content' => '<p>Card content here</p>',
-    'scrollable' => true,
-    'max_height' => '400px',
-]);
-
-echo $card;
-```
-
-### Tabs
-
-```php
-use Pugo\Components\Tabs;
-
-// Language tabs
-echo Tabs::languages($languages, 'en', '?');
-
-// Section tabs  
-echo Tabs::sections($sections, 'users', '?lang=en');
-
-// Category tabs
-echo Tabs::categories($categories, 'all', '?');
-```
-
-### Form Fields
-
-```php
-use Pugo\Components\FormFields\FieldFactory;
-
-// Create fields from schema
-$fields = FieldFactory::fromSchema([
-    'title' => ['type' => 'text', 'label' => 'Title', 'required' => true],
-    'description' => ['type' => 'textarea', 'label' => 'Description'],
-], $values);
-
-foreach ($fields as $field) {
-    echo $field->render();
-}
-```
-
-### Toast Notifications
-
-```php
-use Pugo\Components\Toast;
-
-echo Toast::success('Saved successfully!');
-echo Toast::error('Something went wrong');
-echo Toast::warning('Please check your input');
-```
-
-## 📁 Field Types
-
-| Type | Description |
-|------|-------------|
-| `text` | Single line text input |
-| `textarea` | Multi-line text |
-| `number` | Numeric input |
-| `email` | Email input |
-| `url` | URL input |
-| `select` | Dropdown select |
-| `checkbox` | Boolean checkbox |
-| `date` | Date picker |
-
-## 🔄 Updating Pugo Core
-
-If using as a submodule:
+## ⚡ CLI Commands
 
 ```bash
-cd admin/core
-git pull origin main
-cd ../..
-git add admin/core
-git commit -m "Update pugo-core"
+# Project
+pugo init <name>          # Initialize new project
+pugo build                # Build Hugo site
+pugo serve                # Start dev server
+pugo deploy               # Deploy to production
+
+# Scaffolding
+pugo make:block <name>    # Create new block
+pugo make:data-type <name> # Create data type editor
+pugo make:plugin <name>   # Create new plugin
+pugo make:page <name>     # Create page layout
+
+# Information
+pugo list:blocks          # List available blocks
+pugo list:adapters        # List deployment adapters
+pugo config:show          # Show configuration
+pugo help                 # Show help
+```
+
+## 📝 Configuration (pugo.yaml)
+
+```yaml
+site:
+  name: "My Site"
+  url: "https://example.com"
+  default_language: en
+
+languages:
+  en:
+    name: English
+    flag: 🇬🇧
+  fr:
+    name: Français
+    flag: 🇫🇷
+    suffix: "_fr"
+
+sections:
+  blog:
+    name: Blog
+    color: "#3b82f6"
+    content_type: article
+
+content_types:
+  article:
+    fields:
+      title:
+        type: text
+        required: true
+      description:
+        type: textarea
+
+data_types:
+  faqs:
+    name: FAQs
+    editor: simple-list
+    fields:
+      question:
+        type: text
+        required: true
+      answer:
+        type: textarea
+        required: true
+
+deployment:
+  method: git
+  git:
+    branch: main
+    trigger_pipeline: true
+
+plugins:
+  seo:
+    enabled: true
+    class: Pugo\Plugins\SEOPlugin
+```
+
+## 🔌 Creating Plugins
+
+```php
+<?php
+// admin/plugins/my-plugin/plugin.php
+
+namespace Pugo\Plugins;
+
+class MyPlugin extends Plugin
+{
+    public function getInfo(): array
+    {
+        return [
+            'id' => 'my-plugin',
+            'name' => 'My Plugin',
+            'version' => '1.0.0',
+        ];
+    }
+    
+    public function register(PluginManager $manager): void
+    {
+        $this->manager = $manager;
+        
+        // Add hooks
+        $this->addAction('pugo_init', [$this, 'onInit']);
+        $this->addFilter('pugo_menu', [$this, 'addMenuItem']);
+    }
+}
+
+return new MyPlugin();
+```
+
+## 📦 Creating Blocks
+
+1. Create Hugo partial:
+
+```html
+{{/* layouts/blocks/my-block.html */}}
+{{ $title := .title | default "" }}
+
+<section class="my-block">
+    <h2>{{ $title }}</h2>
+    {{ .content | markdownify }}
+</section>
+```
+
+2. Register in pugo.yaml:
+
+```yaml
+blocks:
+  my-block:
+    name: My Block
+    icon: box
+    category: content
+    partial: blocks/my-block.html
+    fields:
+      title:
+        type: text
+        label: Title
+      content:
+        type: markdown
+        label: Content
 ```
 
 ## 🤝 Contributing
 
-1. Make changes in your project's `admin/core` submodule
-2. Commit and push to pugo-core repository
-3. Update other projects by pulling the submodule
+Contributions are welcome! Please read our contributing guidelines before submitting PRs.
 
 ## 📄 License
 
-MIT License
+MIT License - see LICENSE file for details.
+
+---
+
+Built with ❤️ for the Hugo community
