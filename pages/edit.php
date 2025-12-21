@@ -36,6 +36,8 @@ $body = $parsed['body'];
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check(); // Validate CSRF token
+    
     // Build new frontmatter
     $new_frontmatter = [
         'title' => $_POST['title'] ?? '',
@@ -658,6 +660,7 @@ require __DIR__ . '/../includes/header.php';
 
 <!-- Edit Form -->
 <form method="POST" id="editForm">
+    <?= csrf_field() ?>
     <!-- Title & Description -->
     <div class="card" style="margin-bottom: 24px;">
         <div class="form-group">

@@ -35,10 +35,7 @@ require __DIR__ . '/../includes/header.php';
         <p class="page-subtitle">Welcome back! Here's an overview of your help center.</p>
     </div>
     <a href="new.php" class="btn btn-primary">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
+        <?= pugo_icon('plus') ?>
         New Article
     </a>
 </div>
@@ -58,10 +55,7 @@ require __DIR__ . '/../includes/header.php';
 <div class="grid grid-4" style="margin-bottom: 32px;">
     <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8);">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-            </svg>
+            <?= pugo_icon('file-text', 24) ?>
         </div>
         <div>
             <div class="stat-value"><?= $total_articles ?></div>
@@ -71,10 +65,7 @@ require __DIR__ . '/../includes/header.php';
     
     <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #059669);">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <polyline points="12 6 12 12 16 14"/>
-            </svg>
+            <?= pugo_icon('clock', 24) ?>
         </div>
         <div>
             <div class="stat-value"><?= count($recent_articles) ?></div>
@@ -84,9 +75,7 @@ require __DIR__ . '/../includes/header.php';
     
     <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9);">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
+            <?= pugo_icon('globe', 24) ?>
         </div>
         <div>
             <div class="stat-value"><?= count($config['languages']) ?></div>
@@ -96,9 +85,7 @@ require __DIR__ . '/../includes/header.php';
     
     <div class="stat-card">
         <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-            </svg>
+            <?= pugo_icon('folder', 24) ?>
         </div>
         <div>
             <div class="stat-value"><?= count($sections) ?></div>
@@ -118,9 +105,7 @@ require __DIR__ . '/../includes/header.php';
         
         <?php if (empty($recent_articles)): ?>
         <div class="empty-state">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            </svg>
+            <?= pugo_icon('file-text', 48) ?>
             <h3>No articles yet</h3>
             <p>Create your first article to get started.</p>
         </div>

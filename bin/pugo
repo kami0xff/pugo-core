@@ -1,0 +1,558 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Pugo CLI - Command Line Interface for Pugo CMS
+ * 
+ * Usage:
+ *   ./bin/pugo init          - Initialize pugo.yaml in current project
+ *   ./bin/pugo config        - Show current configuration
+ *   ./bin/pugo scan          - Scan Hugo project and suggest config
+ *   ./bin/pugo validate      - Validate pugo.yaml
+ *   ./bin/pugo build         - Run Hugo build
+ *   ./bin/pugo icons         - List available icons
+ *   ./bin/pugo version       - Show version
+ */
+
+// Find project root
+$projectRoot = getcwd();
+
+// Check if we're inside pugo-core (for development)
+if (basename(dirname(__DIR__)) === 'pugo-core') {
+    // We're in pugo-core/bin, look for project root
+    $possibleRoot = dirname(__DIR__, 3);
+    if (file_exists($possibleRoot . '/hugo.toml') || file_exists($possibleRoot . '/config.toml')) {
+        $projectRoot = $possibleRoot;
+    }
+}
+
+// Define constants
+define('PUGO_CLI', true);
+define('HUGO_ROOT', $projectRoot);
+define('PUGO_CORE', dirname(__DIR__));
+
+// Colors for terminal output
+class Colors {
+    public static function red(string $text): string { return "\033[31m{$text}\033[0m"; }
+    public static function green(string $text): string { return "\033[32m{$text}\033[0m"; }
+    public static function yellow(string $text): string { return "\033[33m{$text}\033[0m"; }
+    public static function blue(string $text): string { return "\033[34m{$text}\033[0m"; }
+    public static function cyan(string $text): string { return "\033[36m{$text}\033[0m"; }
+    public static function bold(string $text): string { return "\033[1m{$text}\033[0m"; }
+    public static function dim(string $text): string { return "\033[2m{$text}\033[0m"; }
+}
+
+/**
+ * Print styled output
+ */
+function out(string $message, string $type = 'info'): void {
+    $prefix = match($type) {
+        'success' => Colors::green('✓'),
+        'error' => Colors::red('✗'),
+        'warning' => Colors::yellow('⚠'),
+        'info' => Colors::blue('ℹ'),
+        'step' => Colors::cyan('→'),
+        default => ' ',
+    };
+    echo "{$prefix} {$message}\n";
+}
+
+function title(string $text): void {
+    echo "\n" . Colors::bold($text) . "\n";
+    echo str_repeat('─', strlen($text)) . "\n\n";
+}
+
+function banner(): void {
+    echo Colors::cyan("
+  ╔═══════════════════════════════════╗
+  ║  " . Colors::bold("PUGO") . Colors::cyan(" - Hugo Admin CLI          ║
+  ║  v3.0.0                           ║
+  ╚═══════════════════════════════════╝
+") . "\n";
+}
+
+// ============================================================================
+// COMMANDS
+// ============================================================================
+
+/**
+ * Show help
+ */
+function cmd_help(): void {
+    banner();
+    echo Colors::bold("Usage:") . " pugo <command> [options]\n\n";
+    echo Colors::bold("Commands:\n");
+    echo "  " . Colors::green("init") . "      Initialize pugo.yaml in current project\n";
+    echo "  " . Colors::green("config") . "    Show current configuration\n";
+    echo "  " . Colors::green("scan") . "      Scan Hugo project and suggest config\n";
+    echo "  " . Colors::green("validate") . "  Validate pugo.yaml syntax and values\n";
+    echo "  " . Colors::green("build") . "     Run Hugo build\n";
+    echo "  " . Colors::green("icons") . "     List all available icons\n";
+    echo "  " . Colors::green("version") . "   Show Pugo version\n";
+    echo "  " . Colors::green("help") . "      Show this help message\n";
+    echo "\n";
+    echo Colors::dim("Project root: " . HUGO_ROOT) . "\n";
+}
+
+/**
+ * Show version
+ */
+function cmd_version(): void {
+    $version = file_exists(PUGO_CORE . '/VERSION') 
+        ? trim(file_get_contents(PUGO_CORE . '/VERSION'))
+        : '3.0.0';
+    echo "Pugo v{$version}\n";
+}
+
+/**
+ * Initialize pugo.yaml
+ */
+function cmd_init(): void {
+    title("Initialize Pugo Configuration");
+    
+    $configPath = HUGO_ROOT . '/pugo.yaml';
+    
+    if (file_exists($configPath)) {
+        out("pugo.yaml already exists at: {$configPath}", 'warning');
+        echo "\n  Use --force to overwrite\n";
+        return;
+    }
+    
+    out("Scanning Hugo project...", 'step');
+    
+    // Detect site info from Hugo config
+    $siteName = 'My Site';
+    $siteUrl = 'http://localhost:1313';
+    
+    foreach (['hugo.toml', 'config.toml', 'hugo.yaml', 'config.yaml'] as $file) {
+        $hugoConfig = HUGO_ROOT . '/' . $file;
+        if (file_exists($hugoConfig)) {
+            $content = file_get_contents($hugoConfig);
+            if (preg_match('/title\s*[=:]\s*["\']?([^"\'"\n]+)/', $content, $m)) {
+                $siteName = trim($m[1], '"\'');
+            }
+            if (preg_match('/baseURL\s*[=:]\s*["\']?([^"\'"\n]+)/', $content, $m)) {
+                $siteUrl = trim($m[1], '"\'');
+            }
+            out("Found Hugo config: {$file}", 'success');
+            break;
+        }
+    }
+    
+    // Detect sections from content folder
+    $sections = [];
+    $contentDir = HUGO_ROOT . '/content';
+    if (is_dir($contentDir)) {
+        foreach (scandir($contentDir) as $item) {
+            if ($item[0] === '.' || !is_dir($contentDir . '/' . $item)) continue;
+            $sections[$item] = ucfirst(str_replace('-', ' ', $item));
+        }
+        out("Found " . count($sections) . " content sections", 'success');
+    }
+    
+    // Detect languages from Hugo config or content folders
+    $languages = ['en' => ['name' => 'English', 'flag' => '🇬🇧']];
+    foreach (['content.fr', 'content.de', 'content.es', 'content.it', 'content.nl', 'content.pt'] as $langDir) {
+        if (is_dir(HUGO_ROOT . '/' . $langDir)) {
+            $code = substr($langDir, 8);
+            $languages[$code] = [
+                'name' => match($code) {
+                    'fr' => 'Français',
+                    'de' => 'Deutsch',
+                    'es' => 'Español',
+                    'it' => 'Italiano',
+                    'nl' => 'Nederlands',
+                    'pt' => 'Português',
+                    default => ucfirst($code),
+                },
+                'flag' => match($code) {
+                    'fr' => '🇫🇷',
+                    'de' => '🇩🇪',
+                    'es' => '🇪🇸',
+                    'it' => '🇮🇹',
+                    'nl' => '🇳🇱',
+                    'pt' => '🇵🇹',
+                    default => '🏳️',
+                },
+            ];
+        }
+    }
+    if (count($languages) > 1) {
+        out("Found " . count($languages) . " languages", 'success');
+    }
+    
+    // Detect data files
+    $dataTypes = [];
+    $dataDir = HUGO_ROOT . '/data';
+    if (is_dir($dataDir)) {
+        foreach (glob($dataDir . '/*.yaml') as $file) {
+            $name = basename($file, '.yaml');
+            // Skip language variants
+            if (preg_match('/_[a-z]{2}$/', $name)) continue;
+            $dataTypes[$name] = ucfirst(str_replace(['_', '-'], ' ', $name));
+        }
+        if (!empty($dataTypes)) {
+            out("Found " . count($dataTypes) . " data files", 'success');
+        }
+    }
+    
+    // Generate YAML
+    out("Generating pugo.yaml...", 'step');
+    
+    $yaml = <<<YAML
+# =============================================================================
+# PUGO CONFIGURATION
+# Generated by: pugo init
+# =============================================================================
+
+site:
+  name: "{$siteName}"
+  url: "{$siteUrl}"
+  default_language: en
+
+# -----------------------------------------------------------------------------
+# LANGUAGES
+# -----------------------------------------------------------------------------
+languages:
+
+YAML;
+
+    foreach ($languages as $code => $lang) {
+        $suffix = $code === 'en' ? '""' : '"_' . $code . '"';
+        $yaml .= "  {$code}:\n";
+        $yaml .= "    name: {$lang['name']}\n";
+        $yaml .= "    flag: {$lang['flag']}\n";
+        $yaml .= "    suffix: {$suffix}\n";
+    }
+
+    if (!empty($sections)) {
+        $yaml .= "\n# -----------------------------------------------------------------------------\n";
+        $yaml .= "# CONTENT SECTIONS\n";
+        $yaml .= "# -----------------------------------------------------------------------------\n";
+        $yaml .= "sections:\n";
+        
+        $colors = ['#3b82f6', '#ec4899', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444'];
+        $i = 0;
+        foreach ($sections as $slug => $name) {
+            $color = $colors[$i % count($colors)];
+            $yaml .= "  {$slug}:\n";
+            $yaml .= "    name: {$name}\n";
+            $yaml .= "    color: \"{$color}\"\n";
+            $i++;
+        }
+    }
+
+    if (!empty($dataTypes)) {
+        $yaml .= "\n# -----------------------------------------------------------------------------\n";
+        $yaml .= "# DATA TYPES\n";
+        $yaml .= "# -----------------------------------------------------------------------------\n";
+        $yaml .= "data_types:\n";
+        
+        foreach ($dataTypes as $slug => $name) {
+            $yaml .= "  {$slug}:\n";
+            $yaml .= "    name: {$name}\n";
+            $yaml .= "    file: {$slug}\n";
+            $yaml .= "    editor: simple-list\n";
+        }
+    }
+
+    $yaml .= <<<YAML
+
+# -----------------------------------------------------------------------------
+# DEPLOYMENT
+# -----------------------------------------------------------------------------
+deployment:
+  method: git
+  git:
+    enabled: true
+    branch: main
+    auto_commit: false
+
+# -----------------------------------------------------------------------------
+# AUTHENTICATION
+# -----------------------------------------------------------------------------
+auth:
+  enabled: true
+  # Generate password hash: php -r "echo password_hash('yourpassword', PASSWORD_DEFAULT);"
+  # password_hash: "\$2y\$10\$..."
+
+YAML;
+
+    // Write file
+    if (file_put_contents($configPath, $yaml)) {
+        out("Created: pugo.yaml", 'success');
+        echo "\n" . Colors::dim("Edit the file to customize your configuration.") . "\n";
+    } else {
+        out("Failed to write pugo.yaml", 'error');
+    }
+}
+
+/**
+ * Show current config
+ */
+function cmd_config(): void {
+    title("Current Configuration");
+    
+    $configPath = HUGO_ROOT . '/pugo.yaml';
+    
+    if (!file_exists($configPath)) {
+        out("No pugo.yaml found. Run 'pugo init' to create one.", 'warning');
+        return;
+    }
+    
+    // Load config
+    require_once PUGO_CORE . '/Config/PugoConfig.php';
+    $config = \Pugo\Config\PugoConfig::getInstance(HUGO_ROOT);
+    
+    echo Colors::bold("Site:") . "\n";
+    echo "  Name: " . $config->get('site.name', 'Not set') . "\n";
+    echo "  URL: " . $config->get('site.url', 'Not set') . "\n";
+    
+    echo "\n" . Colors::bold("Languages:") . "\n";
+    foreach ($config->languages() as $code => $lang) {
+        echo "  {$lang['flag']} {$code}: {$lang['name']}\n";
+    }
+    
+    $sections = $config->sections();
+    if (!empty($sections)) {
+        echo "\n" . Colors::bold("Sections:") . "\n";
+        foreach ($sections as $slug => $section) {
+            $name = is_array($section) ? ($section['name'] ?? $slug) : $section;
+            echo "  • {$slug}: {$name}\n";
+        }
+    }
+    
+    $dataTypes = $config->dataTypes();
+    if (!empty($dataTypes)) {
+        echo "\n" . Colors::bold("Data Types:") . "\n";
+        foreach ($dataTypes as $slug => $type) {
+            $name = is_array($type) ? ($type['name'] ?? $slug) : $type;
+            echo "  • {$slug}: {$name}\n";
+        }
+    }
+    
+    echo "\n" . Colors::bold("Deployment:") . "\n";
+    echo "  Method: " . $config->get('deployment.method', 'git') . "\n";
+    
+    echo "\n" . Colors::dim("Config file: {$configPath}") . "\n";
+}
+
+/**
+ * Scan project
+ */
+function cmd_scan(): void {
+    title("Scanning Hugo Project");
+    
+    echo Colors::bold("Project Root:") . " " . HUGO_ROOT . "\n\n";
+    
+    // Check Hugo config
+    $hugoConfigFound = false;
+    foreach (['hugo.toml', 'config.toml', 'hugo.yaml', 'config.yaml'] as $file) {
+        if (file_exists(HUGO_ROOT . '/' . $file)) {
+            out("Hugo config: {$file}", 'success');
+            $hugoConfigFound = true;
+            break;
+        }
+    }
+    if (!$hugoConfigFound) {
+        out("No Hugo config found", 'warning');
+    }
+    
+    // Check content
+    if (is_dir(HUGO_ROOT . '/content')) {
+        $sections = [];
+        foreach (scandir(HUGO_ROOT . '/content') as $item) {
+            if ($item[0] !== '.' && is_dir(HUGO_ROOT . '/content/' . $item)) {
+                $count = count(glob(HUGO_ROOT . '/content/' . $item . '/*.md'));
+                $sections[$item] = $count;
+            }
+        }
+        out("Content sections: " . count($sections), 'success');
+        foreach ($sections as $section => $count) {
+            echo "    • {$section}: {$count} articles\n";
+        }
+    } else {
+        out("No content folder found", 'warning');
+    }
+    
+    // Check data
+    if (is_dir(HUGO_ROOT . '/data')) {
+        $dataFiles = glob(HUGO_ROOT . '/data/*.yaml');
+        out("Data files: " . count($dataFiles), 'success');
+        foreach ($dataFiles as $file) {
+            echo "    • " . basename($file) . "\n";
+        }
+    }
+    
+    // Check languages
+    $langDirs = glob(HUGO_ROOT . '/content.*', GLOB_ONLYDIR);
+    if (!empty($langDirs)) {
+        out("Language folders: " . count($langDirs), 'success');
+        foreach ($langDirs as $dir) {
+            echo "    • " . basename($dir) . "\n";
+        }
+    }
+    
+    // Check layouts
+    if (is_dir(HUGO_ROOT . '/layouts')) {
+        $layouts = glob(HUGO_ROOT . '/layouts/**/*.html');
+        out("Layout files: " . count($layouts), 'success');
+    }
+    
+    // Check pugo.yaml
+    if (file_exists(HUGO_ROOT . '/pugo.yaml')) {
+        out("pugo.yaml exists", 'success');
+    } else {
+        out("pugo.yaml not found - run 'pugo init' to create", 'info');
+    }
+}
+
+/**
+ * Validate config
+ */
+function cmd_validate(): void {
+    title("Validating Configuration");
+    
+    $configPath = HUGO_ROOT . '/pugo.yaml';
+    $errors = [];
+    $warnings = [];
+    
+    if (!file_exists($configPath)) {
+        out("pugo.yaml not found", 'error');
+        return;
+    }
+    
+    require_once PUGO_CORE . '/Config/PugoConfig.php';
+    
+    try {
+        $config = \Pugo\Config\PugoConfig::getInstance(HUGO_ROOT);
+        out("YAML syntax is valid", 'success');
+    } catch (Exception $e) {
+        out("YAML parse error: " . $e->getMessage(), 'error');
+        return;
+    }
+    
+    // Check required fields
+    if (!$config->get('site.name')) {
+        $warnings[] = "site.name is not set";
+    }
+    
+    // Check languages
+    $languages = $config->languages();
+    if (empty($languages)) {
+        $errors[] = "No languages defined";
+    } else {
+        out("Languages: " . count($languages) . " defined", 'success');
+        foreach ($languages as $code => $lang) {
+            if (!isset($lang['name'])) {
+                $warnings[] = "Language {$code} missing 'name'";
+            }
+        }
+    }
+    
+    // Check sections exist
+    $sections = $config->sections();
+    foreach ($sections as $slug => $section) {
+        $path = HUGO_ROOT . '/content/' . $slug;
+        if (!is_dir($path)) {
+            $warnings[] = "Section '{$slug}' folder not found at content/{$slug}";
+        }
+    }
+    
+    // Report
+    if (!empty($errors)) {
+        echo "\n" . Colors::bold(Colors::red("Errors:")) . "\n";
+        foreach ($errors as $error) {
+            out($error, 'error');
+        }
+    }
+    
+    if (!empty($warnings)) {
+        echo "\n" . Colors::bold(Colors::yellow("Warnings:")) . "\n";
+        foreach ($warnings as $warning) {
+            out($warning, 'warning');
+        }
+    }
+    
+    if (empty($errors) && empty($warnings)) {
+        out("Configuration is valid!", 'success');
+    }
+}
+
+/**
+ * Build Hugo
+ */
+function cmd_build(): void {
+    title("Building Hugo Site");
+    
+    $command = 'cd ' . escapeshellarg(HUGO_ROOT) . ' && hugo --minify 2>&1';
+    
+    out("Running: hugo --minify", 'step');
+    echo "\n";
+    
+    passthru($command, $exitCode);
+    
+    echo "\n";
+    if ($exitCode === 0) {
+        out("Build completed successfully", 'success');
+    } else {
+        out("Build failed with exit code {$exitCode}", 'error');
+    }
+}
+
+/**
+ * List icons
+ */
+function cmd_icons(): void {
+    title("Available Icons");
+    
+    // Load Icons class if it exists
+    $iconsFile = PUGO_CORE . '/assets/Icons.php';
+    if (file_exists($iconsFile)) {
+        require_once $iconsFile;
+        $icons = \Pugo\Assets\Icons::all();
+    } else {
+        // Fall back to CardIcon enum
+        require_once PUGO_CORE . '/Components/Card.php';
+        $icons = [];
+        foreach (\Pugo\Components\CardIcon::cases() as $case) {
+            $icons[] = strtolower(preg_replace('/([a-z])([A-Z])/', '$1-$2', $case->name));
+        }
+    }
+    
+    echo "Total: " . count($icons) . " icons\n\n";
+    
+    $columns = 4;
+    $col = 0;
+    foreach ($icons as $icon) {
+        $name = is_string($icon) ? $icon : $icon['name'];
+        printf("  %-20s", $name);
+        $col++;
+        if ($col >= $columns) {
+            echo "\n";
+            $col = 0;
+        }
+    }
+    echo "\n";
+}
+
+// ============================================================================
+// MAIN
+// ============================================================================
+
+$command = $argv[1] ?? 'help';
+
+match($command) {
+    'help', '--help', '-h' => cmd_help(),
+    'version', '--version', '-v' => cmd_version(),
+    'init' => cmd_init(),
+    'config' => cmd_config(),
+    'scan' => cmd_scan(),
+    'validate' => cmd_validate(),
+    'build' => cmd_build(),
+    'icons' => cmd_icons(),
+    default => (function() use ($command) {
+        out("Unknown command: {$command}", 'error');
+        echo "Run 'pugo help' for available commands.\n";
+    })(),
+};
+

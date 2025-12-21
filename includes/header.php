@@ -1,14 +1,32 @@
 <?php
 /**
  * Hugo Admin - Header Template
+ * 
+ * Note: CSRF functions (csrf_field, csrf_check) are loaded in auth.php
  */
 $current_page = basename($_SERVER['PHP_SELF'], '.php');
+
+// Load centralized Icons (if not already loaded)
+if (!class_exists('Pugo\Assets\Icons')) {
+    require_once __DIR__ . '/../assets/Icons.php';
+}
+use Pugo\Assets\Icons;
+
+/**
+ * Helper function to render an icon in the header/sidebar
+ */
+if (!function_exists('pugo_icon')) {
+    function pugo_icon(string $name, int $size = 18): string {
+        return \Pugo\Assets\Icons::render($name, $size);
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<?= csrf_token() ?>">
     <title><?= $page_title ?? 'Dashboard' ?> - Hugo Admin</title>
     
     <!-- Fonts -->
@@ -868,61 +886,37 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-logo">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                    <path d="M2 17l10 5 10-5"/>
-                    <path d="M2 12l10 5 10-5"/>
-                </svg>
+                <?= pugo_icon('layers', 32) ?>
                 <div>
                     <span>Hugo Admin</span>
-                    <small>XloveCam Help Center</small>
+                    <small><?= htmlspecialchars($config['site_name'] ?? 'Pugo CMS') ?></small>
                 </div>
             </div>
             
             <nav class="nav-section">
                 <div class="nav-section-title">Main</div>
                 <a href="index.php" class="nav-item <?= $current_page === 'index' ? 'active' : '' ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="7" height="7"/>
-                        <rect x="14" y="3" width="7" height="7"/>
-                        <rect x="14" y="14" width="7" height="7"/>
-                        <rect x="3" y="14" width="7" height="7"/>
-                    </svg>
+                    <?= pugo_icon('grid') ?>
                     Dashboard
                 </a>
                 <a href="articles.php" class="nav-item <?= $current_page === 'articles' ? 'active' : '' ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                        <polyline points="10 9 9 9 8 9"/>
-                    </svg>
+                    <?= pugo_icon('file-text') ?>
                     Articles
                 </a>
+                <a href="pages.php" class="nav-item <?= $current_page === 'pages' || $current_page === 'page-edit' ? 'active' : '' ?>">
+                    <?= pugo_icon('layout') ?>
+                    Pages
+                </a>
                 <a href="media.php" class="nav-item <?= $current_page === 'media' ? 'active' : '' ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                        <circle cx="8.5" cy="8.5" r="1.5"/>
-                        <polyline points="21 15 16 10 5 21"/>
-                    </svg>
+                    <?= pugo_icon('image') ?>
                     Media
                 </a>
                 <a href="data.php" class="nav-item <?= $current_page === 'data' ? 'active' : '' ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                        <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-                    </svg>
+                    <?= pugo_icon('database') ?>
                     Data Files
                 </a>
                 <a href="components.php" class="nav-item <?= $current_page === 'components' ? 'active' : '' ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="7" height="7"/>
-                        <rect x="14" y="3" width="7" height="7"/>
-                        <rect x="14" y="14" width="7" height="7"/>
-                        <rect x="3" y="14" width="7" height="7"/>
-                    </svg>
+                    <?= pugo_icon('box') ?>
                     Site Components
                 </a>
             </nav>
@@ -930,24 +924,15 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
             <nav class="nav-section">
                 <div class="nav-section-title">Tools</div>
                 <a href="taxonomy.php" class="nav-item <?= $current_page === 'taxonomy' ? 'active' : '' ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 3h18v18H3zM9 3v18M15 3v18M3 9h18M3 15h18"/>
-                    </svg>
+                    <?= pugo_icon('tags') ?>
                     Taxonomy
                 </a>
                 <a href="scanner.php" class="nav-item <?= $current_page === 'scanner' ? 'active' : '' ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"/>
-                        <path d="M21 21l-4.35-4.35"/>
-                    </svg>
+                    <?= pugo_icon('search') ?>
                     Scanner
                 </a>
                 <a href="help.php" class="nav-item <?= $current_page === 'help' ? 'active' : '' ?>">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-                        <line x1="12" y1="17" x2="12.01" y2="17"/>
-                    </svg>
+                    <?= pugo_icon('help-circle') ?>
                     Help & Docs
                 </a>
             </nav>
@@ -968,18 +953,11 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
             
             <div class="sidebar-footer">
                 <a href="settings.php" class="nav-item">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="3"/>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                    </svg>
+                    <?= pugo_icon('settings') ?>
                     Settings
                 </a>
                 <a href="logout.php" class="nav-item">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                        <polyline points="16 17 21 12 16 7"/>
-                        <line x1="21" y1="12" x2="9" y2="12"/>
-                    </svg>
+                    <?= pugo_icon('log-out') ?>
                     Logout
                 </a>
             </div>

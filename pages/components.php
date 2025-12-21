@@ -9,9 +9,9 @@
  * To customize components for your site, create admin/custom/components_registry.php
  * that returns an array of component definitions.
  */
-define('HUGO_ADMIN', true);
 
-$config = require dirname(__DIR__, 2) . '/config.php';
+// Use unified initialization (provides $config from PugoConfig)
+require __DIR__ . '/../pugo_init.php';
 require __DIR__ . '/../includes/functions.php';
 require __DIR__ . '/../includes/auth.php';
 require_auth();
@@ -82,18 +82,8 @@ if (file_exists($custom_registry_path)) {
     ];
 }
 
-// Languages - use config if available
-$languages = $config['languages'] ?? [
-    'en' => ['name' => 'English', 'flag' => '🇬🇧', 'suffix' => ''],
-];
-
-// Add suffix for non-English languages if not present
-foreach ($languages as $lang_code => &$lang_config) {
-    if (!isset($lang_config['suffix'])) {
-        $lang_config['suffix'] = ($lang_code === 'en') ? '' : '_' . $lang_code;
-    }
-}
-unset($lang_config);
+// Languages from unified config (pugo_init.php provides $config with languages from pugo.yaml)
+$languages = $config['languages'];
 
 /**
  * Load component data from YAML file
@@ -296,6 +286,8 @@ $message = null;
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $current_component && isset($component_registry[$current_component])) {
+    csrf_check(); // Validate CSRF token
+    
     $comp = $component_registry[$current_component];
     $items = [];
     
@@ -912,6 +904,7 @@ require __DIR__ . '/../includes/header.php';
 </div>
 
 <form method="POST" id="componentForm">
+    <?= csrf_field() ?>
     <div class="editor-container" style="--component-color: <?= $comp['color'] ?>">
         <!-- Editor Panel -->
         <div class="editor-card">

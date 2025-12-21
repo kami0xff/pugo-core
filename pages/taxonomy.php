@@ -19,6 +19,8 @@ $message = '';
 $message_type = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    csrf_check(); // Validate CSRF token
+    
     $actionType = $_POST['action'];
     
     if ($actionType === 'rename_tag') {
@@ -945,6 +947,7 @@ include __DIR__ . '/includes/header.php';
             </button>
         </div>
         <form method="POST">
+            <?= csrf_field() ?>
             <input type="hidden" name="action" value="rename_tag">
             <input type="hidden" name="old_tag" id="renameOldTag">
             <div class="modal-body">
@@ -979,6 +982,7 @@ include __DIR__ . '/includes/header.php';
             </button>
         </div>
         <form method="POST">
+            <?= csrf_field() ?>
             <input type="hidden" name="action" value="merge_tags">
             <input type="hidden" name="source_tag" id="mergeSourceTag">
             <div class="modal-body">
@@ -1018,6 +1022,7 @@ include __DIR__ . '/includes/header.php';
             </button>
         </div>
         <form method="POST">
+            <?= csrf_field() ?>
             <input type="hidden" name="action" value="delete_tag">
             <input type="hidden" name="tag" id="deleteTag">
             <div class="modal-body">

@@ -5,6 +5,23 @@
     <script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
     
     <script>
+        // CSRF token for AJAX requests
+        const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        
+        // Helper for fetch with CSRF token
+        async function apiPost(url, data = {}) {
+            const formData = new FormData();
+            formData.append('_csrf_token', CSRF_TOKEN);
+            for (const [key, value] of Object.entries(data)) {
+                formData.append(key, value);
+            }
+            const response = await fetch(url, {
+                method: 'POST',
+                body: formData
+            });
+            return response.json();
+        }
+        
         // Toast notification
         function showToast(message, type = 'success') {
             const toast = document.createElement('div');

@@ -15,6 +15,7 @@ $current_path = $_GET['path'] ?? '';
 // Handle file upload
 $upload_message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
+    csrf_check(); // Validate CSRF token
     $file = $_FILES['file'];
     $target_dir = $_POST['directory'] ?? 'articles';
     $target_path = IMAGES_DIR . '/' . $target_dir;
@@ -47,8 +48,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
     }
 }
 
-// Handle file deletion
+// Handle file deletion (CSRF already checked above)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
+    csrf_check();
     $delete_path = $_POST['delete'];
     $full_path = STATIC_DIR . $delete_path;
     
@@ -65,6 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
 
 // Handle folder creation
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_folder'])) {
+    csrf_check();
     $folder_name = generate_slug($_POST['new_folder']);
     $parent = $_POST['parent'] ?? '';
     $new_folder_path = IMAGES_DIR . ($parent ? '/' . $parent : '') . '/' . $folder_name;
@@ -209,6 +212,7 @@ require __DIR__ . '/../includes/header.php';
         </div>
         
         <form method="POST" enctype="multipart/form-data">
+            <?= csrf_field() ?>
             <div class="form-group">
                 <label class="form-label">Upload to folder</label>
                 <input type="text" name="directory" class="form-input" 
@@ -249,6 +253,7 @@ require __DIR__ . '/../includes/header.php';
         </div>
         
         <form method="POST">
+            <?= csrf_field() ?>
             <input type="hidden" name="parent" value="<?= htmlspecialchars($current_path) ?>">
             
             <div class="form-group">
@@ -318,6 +323,7 @@ function showMediaDetails(file) {
         
         <div style="display: flex; gap: 12px; justify-content: flex-end;">
             <form method="POST" style="display: inline;" onsubmit="return confirm('Delete this file permanently?')">
+                <input type="hidden" name="_csrf_token" value="<?= csrf_token() ?>">
                 <input type="hidden" name="delete" value="${file.path}">
                 <button type="submit" class="btn btn-secondary" style="color: #e11d48;">
                     Delete

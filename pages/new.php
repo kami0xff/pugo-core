@@ -40,6 +40,8 @@ $sections = get_sections_with_counts($current_lang);
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check(); // Validate CSRF token
+    
     $section = $_POST['section'] ?? '';
     $category = $_POST['category'] ?? '';
     $slug = generate_slug($_POST['title'] ?? 'untitled');
@@ -161,6 +163,7 @@ require __DIR__ . '/../includes/header.php';
 
 <!-- Create Form -->
 <form method="POST" id="createForm">
+    <?= csrf_field() ?>
     <input type="hidden" name="translationKey" value="<?= htmlspecialchars($source_article['frontmatter']['translationKey'] ?? '') ?>">
     
     <?php if (!$source_article): ?>

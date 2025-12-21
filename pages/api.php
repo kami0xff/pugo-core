@@ -18,6 +18,16 @@ if (!is_authenticated()) {
     exit;
 }
 
+// CSRF protection for all POST requests
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    require_once __DIR__ . '/../Security/CSRF.php';
+    if (!\Pugo\Security\CSRF::validate()) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
+        exit;
+    }
+}
+
 header('Content-Type: application/json');
 
 $action = $_GET['action'] ?? '';

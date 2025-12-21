@@ -2,104 +2,364 @@
 /**
  * Pugo Core - Card Component
  * 
- * A card container with optional header and footer.
+ * A card container with optional header, footer, and icon.
+ * Used for grouping related content with visual structure.
+ * 
+ * Icons are loaded from the centralized Icons library (assets/Icons.php)
  */
 
 namespace Pugo\Components;
 
-class Card extends Component
+use Pugo\Assets\Icons;
+
+// Load the centralized Icons library
+require_once dirname(__DIR__) . '/assets/Icons.php';
+
+/**
+ * Card configuration properties
+ */
+final class CardProps
 {
-    protected function getDefaultProps(): array
-    {
-        return [
-            'title' => '',
-            'icon' => null,
-            'header_right' => '',
-            'footer' => '',
-            'body_class' => '',
-            'scrollable' => false,
-            'max_height' => null,
-        ];
+    public function __construct(
+        public readonly ?string $title = null,
+        public readonly ?string $icon = null,  // Icon name string (e.g., 'settings', 'file-text')
+        public readonly ?string $headerRight = null,
+        public readonly ?string $footer = null,
+        public readonly ?string $bodyClass = null,
+        public readonly bool $scrollable = false,
+        public readonly ?string $maxHeight = null,
+        public readonly ?string $id = null,
+        public readonly ?string $color = null,
+    ) {
     }
-    
-    public function render(): string
+
+    /**
+     * Create a basic card with just a title
+     */
+    public static function titled(string $title, ?string $icon = null): self
     {
-        $title = $this->props['title'];
-        $icon = $this->props['icon'];
-        $headerRight = $this->props['header_right'];
-        $footer = $this->props['footer'];
-        $bodyClass = $this->props['body_class'];
-        $scrollable = $this->props['scrollable'];
-        $maxHeight = $this->props['max_height'];
-        $content = $this->props['content'] ?? '';
-        
-        $hasHeader = $title || $icon || $headerRight;
-        
-        $bodyStyle = '';
-        if ($scrollable || $maxHeight) {
-            $height = $maxHeight ?? '500px';
-            $bodyStyle = "max-height: {$height}; overflow-y: auto;";
-        }
-        
-        $html = '<div class="pugo-card">';
-        
-        // Header
-        if ($hasHeader) {
-            $html .= '<div class="pugo-card-header">';
-            $html .= '<div class="pugo-card-title">';
-            
-            if ($icon) {
-                $html .= $this->renderIcon($icon);
-            }
-            
-            if ($title) {
-                $html .= $this->e($title);
-            }
-            
-            $html .= '</div>';
-            
-            if ($headerRight) {
-                $html .= '<div class="pugo-card-header-right">' . $headerRight . '</div>';
-            }
-            
-            $html .= '</div>';
-        }
-        
-        // Body
-        $html .= '<div class="pugo-card-body ' . $this->e($bodyClass) . '" style="' . $bodyStyle . '">';
-        $html .= $content;
-        $html .= '</div>';
-        
-        // Footer
-        if ($footer) {
-            $html .= '<div class="pugo-card-footer">' . $footer . '</div>';
-        }
-        
-        $html .= '</div>';
-        
-        return $html;
+        return new self(title: $title, icon: $icon);
     }
-    
-    protected function renderIcon(string $icon): string
+
+    /**
+     * Create with scrollable body
+     */
+    public function scrollable(string $maxHeight = '500px'): self
     {
-        // Common icons mapping
-        $icons = [
-            'file-text' => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
-            'database' => '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
-            'grid' => '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
-            'eye' => '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
-            'settings' => '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
-            'help-circle' => '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
-            'video' => '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>',
-            'book' => '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
-            'save' => '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
-            'plus' => '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
-            'trash' => '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
-        ];
-        
-        $path = $icons[$icon] ?? $icons['file-text'];
-        
-        return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' . $path . '</svg>';
+        return new self(
+            title: $this->title,
+            icon: $this->icon,
+            headerRight: $this->headerRight,
+            footer: $this->footer,
+            bodyClass: $this->bodyClass,
+            scrollable: true,
+            maxHeight: $maxHeight,
+            id: $this->id,
+            color: $this->color,
+        );
+    }
+
+    /**
+     * Add header right content
+     */
+    public function withHeaderRight(string $content): self
+    {
+        return new self(
+            title: $this->title,
+            icon: $this->icon,
+            headerRight: $content,
+            footer: $this->footer,
+            bodyClass: $this->bodyClass,
+            scrollable: $this->scrollable,
+            maxHeight: $this->maxHeight,
+            id: $this->id,
+            color: $this->color,
+        );
+    }
+
+    /**
+     * Add footer content
+     */
+    public function withFooter(string $content): self
+    {
+        return new self(
+            title: $this->title,
+            icon: $this->icon,
+            headerRight: $this->headerRight,
+            footer: $content,
+            bodyClass: $this->bodyClass,
+            scrollable: $this->scrollable,
+            maxHeight: $this->maxHeight,
+            id: $this->id,
+            color: $this->color,
+        );
+    }
+
+    /**
+     * Set a color theme
+     */
+    public function withColor(string $color): self
+    {
+        return new self(
+            title: $this->title,
+            icon: $this->icon,
+            headerRight: $this->headerRight,
+            footer: $this->footer,
+            bodyClass: $this->bodyClass,
+            scrollable: $this->scrollable,
+            maxHeight: $this->maxHeight,
+            id: $this->id,
+            color: $color,
+        );
+    }
+
+    /**
+     * Set a different icon
+     */
+    public function withIcon(string $icon): self
+    {
+        return new self(
+            title: $this->title,
+            icon: $icon,
+            headerRight: $this->headerRight,
+            footer: $this->footer,
+            bodyClass: $this->bodyClass,
+            scrollable: $this->scrollable,
+            maxHeight: $this->maxHeight,
+            id: $this->id,
+            color: $this->color,
+        );
     }
 }
 
+/**
+ * Card Component
+ * 
+ * @example Basic card with title:
+ * ```php
+ * echo Card::create(CardProps::titled('Settings', 'settings'))
+ *     ->setContent('<p>Card content here</p>');
+ * ```
+ * 
+ * @example Scrollable card:
+ * ```php
+ * echo Card::create(CardProps::titled('Long List')->scrollable('300px'))
+ *     ->setContent($longListHtml);
+ * ```
+ * 
+ * @example Simple card without header:
+ * ```php
+ * echo Card::simple()->setContent('Just content, no header');
+ * ```
+ * 
+ * @example Card with footer:
+ * ```php
+ * $props = CardProps::titled('Form')
+ *     ->withFooter('<button type="submit">Save</button>');
+ * echo Card::create($props)->setContent($formHtml);
+ * ```
+ */
+class Card extends Component
+{
+    private CardProps $cardProps;
+    private string $content = '';
+
+    public function __construct(CardProps|array $props = [])
+    {
+        if ($props instanceof CardProps) {
+            $this->cardProps = $props;
+            parent::__construct([]);
+        } else {
+            // Legacy array support
+            $this->cardProps = new CardProps(
+                title: $props['title'] ?? null,
+                icon: $props['icon'] ?? null,  // Now just a string
+                headerRight: $props['header_right'] ?? $props['headerRight'] ?? null,
+                footer: $props['footer'] ?? null,
+                bodyClass: $props['body_class'] ?? $props['bodyClass'] ?? null,
+                scrollable: $props['scrollable'] ?? false,
+                maxHeight: $props['max_height'] ?? $props['maxHeight'] ?? null,
+                id: $props['id'] ?? null,
+                color: $props['color'] ?? null,
+            );
+            $this->content = $props['content'] ?? '';
+            parent::__construct($props);
+        }
+    }
+
+    /**
+     * Create card with props object
+     */
+    public static function create(CardProps $props): static
+    {
+        return new static($props);
+    }
+
+    /**
+     * Create a simple card without header
+     */
+    public static function simple(): static
+    {
+        return new static(new CardProps());
+    }
+
+    /**
+     * Create a titled card
+     */
+    public static function titled(string $title, ?string $icon = null): static
+    {
+        return new static(CardProps::titled($title, $icon));
+    }
+
+    /**
+     * Set the card content (fluent interface)
+     */
+    public function setContent(string $content): static
+    {
+        $this->content = $content;
+        return $this;
+    }
+
+    /**
+     * Alias for setContent for convenience
+     */
+    public function content(string $content): static
+    {
+        return $this->setContent($content);
+    }
+
+    /**
+     * Render the card
+     */
+    public function render(): string
+    {
+        $props = $this->cardProps;
+
+        $hasHeader = $props->title || $props->icon || $props->headerRight;
+
+        // Build body style
+        $bodyStyle = '';
+        if ($props->scrollable || $props->maxHeight) {
+            $height = $props->maxHeight ?? '500px';
+            $bodyStyle = "max-height: {$height}; overflow-y: auto;";
+        }
+
+        // Build container attributes
+        $containerClass = 'pugo-card';
+        $containerStyle = '';
+        if ($props->color) {
+            $containerStyle = '--card-color: ' . $this->e($props->color);
+        }
+
+        $attrs = ['class' => $containerClass];
+        if ($props->id) {
+            $attrs['id'] = $props->id;
+        }
+        if ($containerStyle) {
+            $attrs['style'] = $containerStyle;
+        }
+
+        $html = '<div' . $this->buildAttributes($attrs) . '>';
+
+        // Header
+        if ($hasHeader) {
+            $html .= $this->renderHeader($props);
+        }
+
+        // Body
+        $bodyClass = 'pugo-card-body';
+        if ($props->bodyClass) {
+            $bodyClass .= ' ' . $props->bodyClass;
+        }
+
+        $html .= '<div class="' . $this->e($bodyClass) . '"';
+        if ($bodyStyle) {
+            $html .= ' style="' . $bodyStyle . '"';
+        }
+        $html .= '>';
+        $html .= $this->content;
+        $html .= '</div>';
+
+        // Footer
+        if ($props->footer) {
+            $html .= '<div class="pugo-card-footer">' . $props->footer . '</div>';
+        }
+
+        $html .= '</div>';
+
+        return $html;
+    }
+
+    /**
+     * Render the card header
+     */
+    private function renderHeader(CardProps $props): string
+    {
+        $html = '<div class="pugo-card-header">';
+        $html .= '<div class="pugo-card-title">';
+
+        // Use centralized Icons library
+        if ($props->icon) {
+            $html .= Icons::render($props->icon, 20);
+        }
+
+        if ($props->title) {
+            $html .= $this->e($props->title);
+        }
+
+        $html .= '</div>';
+
+        if ($props->headerRight) {
+            $html .= '<div class="pugo-card-header-right">' . $props->headerRight . '</div>';
+        }
+
+        $html .= '</div>';
+
+        return $html;
+    }
+
+    protected function getDefaultProps(): array
+    {
+        return [];
+    }
+}
+
+/**
+ * Backward compatibility: CardIcon enum that delegates to Icons class
+ * @deprecated Use icon name strings directly (e.g., 'settings' instead of CardIcon::Settings)
+ */
+enum CardIcon: string
+{
+    case FileText = 'file-text';
+    case Database = 'database';
+    case Grid = 'grid';
+    case Eye = 'eye';
+    case Settings = 'settings';
+    case HelpCircle = 'help-circle';
+    case Video = 'video';
+    case Book = 'book';
+    case Save = 'save';
+    case Plus = 'plus';
+    case Trash = 'trash';
+    case Edit = 'edit';
+    case Users = 'users';
+    case Folder = 'folder';
+    case Image = 'image';
+    case Search = 'search';
+    case Star = 'star';
+    case Heart = 'heart';
+    case Zap = 'zap';
+    case Shield = 'shield';
+    case Globe = 'globe';
+    case Code = 'code';
+    case Terminal = 'terminal';
+    case Layout = 'layout';
+
+    /**
+     * Get the SVG path for this icon from centralized Icons library
+     */
+    public function path(): string
+    {
+        return Icons::path($this->value);
+    }
+}

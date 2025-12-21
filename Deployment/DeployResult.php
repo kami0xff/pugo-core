@@ -53,6 +53,19 @@ class DeployResult
         return $this->status === self::STATUS_FAILURE;
     }
     
+    public function getMessage(): string
+    {
+        if ($this->error) {
+            return $this->message . "\n" . $this->error;
+        }
+        return $this->message;
+    }
+    
+    public function getOutput(): ?string
+    {
+        return $this->data['output'] ?? $this->error;
+    }
+    
     public function toArray(): array
     {
         return [

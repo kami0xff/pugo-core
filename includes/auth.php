@@ -1,9 +1,53 @@
 <?php
 /**
- * Hugo Admin - Authentication
+ * Hugo Admin - Authentication & Security
  */
 
 session_start();
+
+// Load CSRF protection
+require_once __DIR__ . '/../Security/CSRF.php';
+use Pugo\Security\CSRF;
+
+// Load Validator
+require_once __DIR__ . '/../Validation/Validator.php';
+use Pugo\Validation\Validator;
+
+/**
+ * Get CSRF hidden field for forms
+ */
+function csrf_field(): string {
+    return CSRF::field();
+}
+
+/**
+ * Get CSRF token value
+ */
+function csrf_token(): string {
+    return CSRF::getToken();
+}
+
+/**
+ * Validate CSRF token - returns true if valid, dies with error if invalid
+ * Call this at the START of POST handlers
+ */
+function csrf_check(): bool {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        return true;
+    }
+    if (!CSRF::validate()) {
+        http_response_code(403);
+        die('Security token invalid. Please refresh the page and try again.');
+    }
+    return true;
+}
+
+/**
+ * Create a new Validator instance
+ */
+function validate(array $data, array $rules): Validator {
+    return new Validator($data, $rules);
+}
 
 /**
  * Check if user is authenticated

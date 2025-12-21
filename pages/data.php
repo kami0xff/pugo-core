@@ -44,6 +44,8 @@ if (isset($_GET['edit'])) {
 
 // Handle save
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_file'])) {
+    csrf_check(); // Validate CSRF token
+    
     $save_file = basename($_POST['save_file']);
     $save_path = DATA_DIR . '/' . $save_file;
     $content = $_POST['content'] ?? '';
@@ -138,6 +140,7 @@ require __DIR__ . '/../includes/header.php';
         </div>
         
         <form method="POST">
+            <?= csrf_field() ?>
             <input type="hidden" name="save_file" value="<?= htmlspecialchars($editing_file) ?>">
             
             <div class="form-group">

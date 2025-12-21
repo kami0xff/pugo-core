@@ -42,10 +42,7 @@ require __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <a href="new.php?section=<?= $current_section ?>&lang=<?= $current_lang ?>" class="btn btn-primary">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
+        <?= pugo_icon('plus') ?>
         New Article
     </a>
 </div>
@@ -79,11 +76,9 @@ require __DIR__ . '/../includes/header.php';
             <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" 
                    class="form-input" placeholder="Search articles..." 
                    style="padding-left: 40px;">
-            <svg style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; opacity: 0.4;" 
-                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"/>
-                <path d="M21 21l-4.35-4.35"/>
-            </svg>
+            <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); opacity: 0.4;">
+                <?= pugo_icon('search') ?>
+            </span>
         </div>
         
         <button type="submit" class="btn btn-secondary">Search</button>
@@ -98,10 +93,7 @@ require __DIR__ . '/../includes/header.php';
 <?php if (empty($articles)): ?>
 <div class="card">
     <div class="empty-state">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-        </svg>
+        <?= pugo_icon('file-text', 48) ?>
         <h3>No articles found</h3>
         <p>
             <?php if ($search): ?>
@@ -157,9 +149,7 @@ require __DIR__ . '/../includes/header.php';
         
         <span class="article-meta"><?= time_ago($article['modified']) ?></span>
         
-        <svg style="width: 18px; height: 18px; opacity: 0.3;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"/>
-        </svg>
+        <span style="opacity: 0.3;"><?= pugo_icon('chevron-right') ?></span>
     </a>
     <?php endforeach; ?>
 </div>

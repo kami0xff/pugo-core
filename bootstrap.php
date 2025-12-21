@@ -224,11 +224,22 @@ function pugo_view(string $name, array $data = []): void {
 
 /**
  * Get Pugo configuration merged with defaults
+ * 
+ * Uses PugoConfig for consistent config loading from pugo.yaml
  */
 function pugo_config(): array {
     static $config = null;
     
     if ($config === null) {
+        // Try to use pugo_init.php if available (single source of truth)
+        $pugo_init = PUGO_CORE . '/pugo_init.php';
+        if (file_exists($pugo_init)) {
+            require_once $pugo_init;
+            $config = pugo_build_legacy_config();
+            return $config;
+        }
+        
+        // Fallback: Load from config.php directly
         $config_file = PUGO_ROOT . '/config.php';
         
         if (file_exists($config_file)) {
@@ -237,7 +248,19 @@ function pugo_config(): array {
             $config = [];
         }
         
-        // Merge with defaults
+        // Try PugoConfig class for languages
+        try {
+            require_once PUGO_CORE . '/Config/PugoConfig.php';
+            $pugoConfig = \Pugo\Config\PugoConfig::getInstance(HUGO_ROOT);
+            $languages = $pugoConfig->languages();
+            if (!empty($languages)) {
+                $config['languages'] = $languages;
+            }
+        } catch (\Exception $e) {
+            // PugoConfig not available
+        }
+        
+        // Merge with defaults (only for missing values)
         $config = array_merge([
             'site_name' => 'My Site',
             'default_language' => 'en',

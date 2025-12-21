@@ -14,6 +14,7 @@ use Pugo\Components\Toast;
 use Pugo\Components\SaveBar;
 use Pugo\Components\EmptyState;
 use Pugo\Components\FormFields\FieldFactory;
+use Pugo\Config\PugoConfig;
 
 abstract class BaseDataEditor
 {
@@ -23,18 +24,18 @@ abstract class BaseDataEditor
     protected ?string $message = null;
     protected ?string $error = null;
     protected string $currentLang = 'en';
-    
+
     public function __construct(array $config)
     {
         $this->config = array_merge($this->getDefaultConfig(), $config);
         $this->languages = $this->config['languages'] ?? $this->getDefaultLanguages();
         $this->currentLang = $_GET['lang'] ?? array_key_first($this->languages);
-        
+
         if (!isset($this->languages[$this->currentLang])) {
             $this->currentLang = array_key_first($this->languages);
         }
     }
-    
+
     /**
      * Default configuration
      */
@@ -55,22 +56,38 @@ abstract class BaseDataEditor
             'item_name_plural' => 'items',
         ];
     }
-    
+
     /**
-     * Default languages if not specified
+     * Get languages from PugoConfig (single source of truth)
+     * Falls back to minimal English-only if config not available
      */
     protected function getDefaultLanguages(): array
     {
+        // Try to get languages from PugoConfig (the single source of truth)
+        try {
+            $pugoConfig = PugoConfig::getInstance();
+            $languages = $pugoConfig->languages();
+
+            if (!empty($languages)) {
+                // Ensure all language entries have required keys
+                foreach ($languages as $code => &$lang) {
+                    $lang['name'] = $lang['name'] ?? ucfirst($code);
+                    $lang['flag'] = $lang['flag'] ?? '';
+                    $lang['suffix'] = $lang['suffix'] ?? ($code === 'en' ? '' : "_{$code}");
+                }
+                unset($lang);
+                return $languages;
+            }
+        } catch (\Exception $e) {
+            // PugoConfig not available, use fallback
+        }
+
+        // Ultimate fallback - English only
         return [
             'en' => ['name' => 'English', 'flag' => '🇬🇧', 'suffix' => ''],
-            'fr' => ['name' => 'Français', 'flag' => '🇫🇷', 'suffix' => '_fr'],
-            'es' => ['name' => 'Español', 'flag' => '🇪🇸', 'suffix' => '_es'],
-            'de' => ['name' => 'Deutsch', 'flag' => '🇩🇪', 'suffix' => '_de'],
-            'it' => ['name' => 'Italiano', 'flag' => '🇮🇹', 'suffix' => '_it'],
-            'nl' => ['name' => 'Nederlands', 'flag' => '🇳🇱', 'suffix' => '_nl'],
         ];
     }
-    
+
     /**
      * Get data file path for a language
      */
@@ -79,7 +96,7 @@ abstract class BaseDataEditor
         $suffix = $this->languages[$langCode]['suffix'] ?? '';
         return $this->config['data_dir'] . '/' . $this->config['data_file'] . $suffix . '.yaml';
     }
-    
+
     /**
      * Handle HTTP request (GET/POST)
      */
@@ -87,13 +104,13 @@ abstract class BaseDataEditor
     {
         // Load data for all languages
         $this->loadData();
-        
+
         // Handle POST
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $this->handlePost();
         }
     }
-    
+
     /**
      * Load data from files
      */
@@ -104,7 +121,7 @@ abstract class BaseDataEditor
             $this->data[$langCode] = $this->loadYamlFile($file);
         }
     }
-    
+
     /**
      * Load and parse a YAML file
      */
@@ -113,39 +130,39 @@ abstract class BaseDataEditor
         if (!file_exists($file)) {
             return [];
         }
-        
+
         $content = file_get_contents($file);
         return $this->parseYaml($content);
     }
-    
+
     /**
      * Parse YAML content - override in subclasses for custom parsing
      */
     abstract protected function parseYaml(string $content): array;
-    
+
     /**
      * Handle POST request
      */
     protected function handlePost(): void
     {
         $action = $_POST['action'] ?? 'save';
-        
+
         if ($action === 'save') {
             $this->processSave();
         }
     }
-    
+
     /**
      * Process save action
      */
     protected function processSave(): void
     {
         $newData = [];
-        
+
         foreach ($this->languages as $langCode => $langInfo) {
             $newData[$langCode] = $this->processFormData($langCode);
         }
-        
+
         // Save to files
         if ($this->saveAllData($newData)) {
             $this->data = $newData;
@@ -154,38 +171,38 @@ abstract class BaseDataEditor
             $this->error = 'Failed to save. Check file permissions.';
         }
     }
-    
+
     /**
      * Process form data for a language - override in subclasses
      */
     abstract protected function processFormData(string $langCode): array;
-    
+
     /**
      * Save all data to files
      */
     protected function saveAllData(array $data): bool
     {
         $success = true;
-        
+
         foreach ($data as $langCode => $langData) {
             if (!empty($langData) || $langCode === array_key_first($this->languages)) {
                 $file = $this->getDataFilePath($langCode);
                 $yaml = $this->generateYaml($langData);
-                
+
                 if (file_put_contents($file, $yaml) === false) {
                     $success = false;
                 }
             }
         }
-        
+
         return $success;
     }
-    
+
     /**
      * Generate YAML from data - override in subclasses
      */
     abstract protected function generateYaml(array $data): string;
-    
+
     /**
      * Render the complete editor
      */
@@ -197,7 +214,7 @@ abstract class BaseDataEditor
         $this->renderForm();
         $this->renderScripts();
     }
-    
+
     /**
      * Render page header
      */
@@ -205,7 +222,7 @@ abstract class BaseDataEditor
     {
         $title = $this->config['title'];
         $subtitle = $this->config['subtitle'];
-        
+
         echo '<div class="page-header">';
         echo '<div>';
         echo '<h1 class="page-title">' . htmlspecialchars($title) . '</h1>';
@@ -215,7 +232,7 @@ abstract class BaseDataEditor
         echo '</div>';
         echo '</div>';
     }
-    
+
     /**
      * Render toast notification
      */
@@ -228,12 +245,12 @@ abstract class BaseDataEditor
             echo Toast::error($this->error);
         }
     }
-    
+
     /**
      * Render the form and editor - override in subclasses
      */
     abstract protected function renderForm(): void;
-    
+
     /**
      * Render language tabs
      */
@@ -243,15 +260,15 @@ abstract class BaseDataEditor
         foreach ($this->languages as $code => $lang) {
             $counts[$code] = $this->getItemCount($code);
         }
-        
+
         $baseUrl = '?' . http_build_query(array_filter([
             'section' => $_GET['section'] ?? null,
             'category' => $_GET['category'] ?? null,
         ]));
-        
+
         echo Tabs::languages($this->languages, $this->currentLang, $baseUrl, $counts);
     }
-    
+
     /**
      * Get item count for a language - override in subclasses
      */
@@ -259,12 +276,12 @@ abstract class BaseDataEditor
     {
         return count($this->data[$langCode] ?? []);
     }
-    
+
     /**
      * Render items for current language - override in subclasses
      */
     abstract protected function renderItems(): void;
-    
+
     /**
      * Render add button
      */
@@ -277,7 +294,7 @@ abstract class BaseDataEditor
         echo htmlspecialchars($label);
         echo '</button>';
     }
-    
+
     /**
      * Render preview panel - override for custom preview
      */
@@ -291,12 +308,12 @@ abstract class BaseDataEditor
             'scrollable' => true,
             'max_height' => '500px',
         ]);
-        
+
         echo '<div class="pugo-preview-panel">';
         echo $card;
         echo '</div>';
     }
-    
+
     /**
      * Render save bar
      */
@@ -305,17 +322,17 @@ abstract class BaseDataEditor
         $itemName = $this->config['item_name_plural'];
         $langName = $this->languages[$this->currentLang]['name'] ?? 'Unknown';
         $langFlag = $this->languages[$this->currentLang]['flag'] ?? '';
-        
+
         $saveBar = new SaveBar([
             'info' => 'Editing: <strong>' . $langFlag . ' ' . htmlspecialchars($langName) . '</strong>',
             'save_label' => 'Save Changes',
             'cancel_url' => basename($_SERVER['PHP_SELF']),
             'form_id' => 'pugo-editor-form',
         ]);
-        
+
         echo $saveBar;
     }
-    
+
     /**
      * Render CSS styles
      */
@@ -323,7 +340,7 @@ abstract class BaseDataEditor
     {
         echo '<style>' . $this->getStyles() . '</style>';
     }
-    
+
     /**
      * Get CSS styles - can be overridden
      */
@@ -813,7 +830,7 @@ abstract class BaseDataEditor
 }
 ';
     }
-    
+
     /**
      * Render JavaScript
      */
@@ -821,12 +838,12 @@ abstract class BaseDataEditor
     {
         echo '<script>' . $this->getScripts() . '</script>';
     }
-    
+
     /**
      * Get JavaScript - can be overridden
      */
     abstract protected function getScripts(): string;
-    
+
     /**
      * Escape HTML
      */

@@ -115,11 +115,35 @@ class PugoConfig
     }
     
     /**
-     * Get languages configuration
+     * Get languages configuration (normalized with all key variations)
+     * 
+     * Ensures each language has all expected keys:
+     * - name: Display name
+     * - flag: Emoji flag
+     * - suffix: For data files (e.g., "_fr" for faqs_fr.yaml)
+     * - data_suffix: Alias for suffix (backward compatibility)
+     * - content_dir: Content directory (e.g., "content.fr")
      */
     public function languages(): array
     {
-        return $this->get('languages', ['en' => ['name' => 'English', 'flag' => '🇬🇧']]);
+        $languages = $this->get('languages', ['en' => ['name' => 'English', 'flag' => '🇬🇧']]);
+        
+        // Normalize all language entries
+        foreach ($languages as $code => &$lang) {
+            $lang['name'] = $lang['name'] ?? ucfirst($code);
+            $lang['flag'] = $lang['flag'] ?? '';
+            
+            // Normalize suffix (could be 'suffix' or 'data_suffix')
+            $suffix = $lang['suffix'] ?? $lang['data_suffix'] ?? ($code === 'en' ? '' : "_{$code}");
+            $lang['suffix'] = $suffix;
+            $lang['data_suffix'] = $suffix; // Backward compatibility alias
+            
+            // Normalize content_dir
+            $lang['content_dir'] = $lang['content_dir'] ?? ($code === 'en' ? 'content' : "content.{$code}");
+        }
+        unset($lang);
+        
+        return $languages;
     }
     
     /**

@@ -10,6 +10,9 @@ if (!defined('HUGO_ROOT')) {
     throw new \RuntimeException('HUGO_ROOT must be defined before loading Actions');
 }
 
+// Load PugoConfig for single source of truth
+require_once dirname(__DIR__) . '/Config/PugoConfig.php';
+
 // Load ActionResult
 require_once __DIR__ . '/ActionResult.php';
 
@@ -203,30 +206,57 @@ class Actions
 
     public static function scanTranslations(): ?ScanTranslationsAction
     {
-        global $config;
-        
         if (!class_exists(ScanTranslationsAction::class)) {
             return null;
         }
         
         return new ScanTranslationsAction(
             self::$hugoRoot ?? HUGO_ROOT,
-            $config['languages'] ?? ['en' => ['name' => 'English', 'flag' => '🇬🇧', 'content_dir' => 'content']]
+            self::getLanguages()
         );
     }
 
     public static function createTranslation(): ?CreateTranslationAction
     {
-        global $config;
-        
         if (!class_exists(CreateTranslationAction::class)) {
             return null;
         }
         
         return new CreateTranslationAction(
             self::$hugoRoot ?? HUGO_ROOT,
-            $config['languages'] ?? ['en' => ['name' => 'English', 'flag' => '🇬🇧', 'content_dir' => 'content']]
+            self::getLanguages()
         );
+    }
+
+    /**
+     * Get languages from PugoConfig (single source of truth)
+     */
+    private static function getLanguages(): array
+    {
+        // Try PugoConfig first
+        try {
+            $pugoConfig = \Pugo\Config\PugoConfig::getInstance(HUGO_ROOT);
+            $languages = $pugoConfig->languages();
+            if (!empty($languages)) {
+                // Ensure content_dir is set
+                foreach ($languages as $code => &$lang) {
+                    $lang['content_dir'] = $lang['content_dir'] ?? ($code === 'en' ? 'content' : "content.{$code}");
+                }
+                unset($lang);
+                return $languages;
+            }
+        } catch (\Exception $e) {
+            // Fall through to global config
+        }
+        
+        // Fall back to global config
+        global $config;
+        if (isset($config['languages']) && !empty($config['languages'])) {
+            return $config['languages'];
+        }
+        
+        // Ultimate fallback
+        return ['en' => ['name' => 'English', 'flag' => '🇬🇧', 'content_dir' => 'content']];
     }
 }
 

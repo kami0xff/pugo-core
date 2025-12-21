@@ -1,0 +1,275 @@
+/**
+ * Pugo Design System - CSS Variables (Design Tokens)
+ * 
+ * This file defines all design tokens used across the Pugo admin interface.
+ * To customize the theme, override these variables in your project.
+ * 
+ * Usage in your project:
+ *   @import 'pugo-core/assets/css/variables.css';
+ *   
+ *   :root {
+ *     --pugo-accent-primary: #your-color;
+ *   }
+ */
+
+:root {
+    /* =========================================================================
+     * COLOR PALETTE
+     * ========================================================================= */
+    
+    /* Background Colors (Dark Theme - Default) */
+    --pugo-bg-primary: #0f0f0f;
+    --pugo-bg-secondary: #1a1a1a;
+    --pugo-bg-tertiary: #252525;
+    --pugo-bg-hover: #2a2a2a;
+    --pugo-bg-active: #333;
+    --pugo-bg-elevated: #1f1f1f;
+    
+    /* Text Colors */
+    --pugo-text-primary: #f5f5f5;
+    --pugo-text-secondary: #a0a0a0;
+    --pugo-text-muted: #666;
+    --pugo-text-disabled: #444;
+    --pugo-text-inverse: #0f0f0f;
+    
+    /* Border Colors */
+    --pugo-border-color: #333;
+    --pugo-border-light: #2a2a2a;
+    --pugo-border-focus: #555;
+    
+    /* Accent Colors */
+    --pugo-accent-primary: #e11d48;       /* Rose/Red - Primary brand */
+    --pugo-accent-secondary: #be123c;     /* Darker rose */
+    --pugo-accent-hover: #f43f5e;         /* Lighter rose */
+    
+    /* Semantic Colors */
+    --pugo-color-blue: #3b82f6;
+    --pugo-color-green: #10b981;
+    --pugo-color-yellow: #f59e0b;
+    --pugo-color-orange: #f97316;
+    --pugo-color-red: #ef4444;
+    --pugo-color-purple: #8b5cf6;
+    --pugo-color-pink: #ec4899;
+    --pugo-color-cyan: #06b6d4;
+    --pugo-color-teal: #14b8a6;
+    --pugo-color-indigo: #6366f1;
+    
+    /* Status Colors */
+    --pugo-success: var(--pugo-color-green);
+    --pugo-warning: var(--pugo-color-yellow);
+    --pugo-danger: var(--pugo-color-red);
+    --pugo-info: var(--pugo-color-blue);
+    
+    /* =========================================================================
+     * TYPOGRAPHY
+     * ========================================================================= */
+    
+    /* Font Families */
+    --pugo-font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --pugo-font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+    
+    /* Font Sizes */
+    --pugo-text-xs: 11px;
+    --pugo-text-sm: 13px;
+    --pugo-text-base: 14px;
+    --pugo-text-md: 15px;
+    --pugo-text-lg: 16px;
+    --pugo-text-xl: 18px;
+    --pugo-text-2xl: 20px;
+    --pugo-text-3xl: 24px;
+    --pugo-text-4xl: 28px;
+    --pugo-text-5xl: 32px;
+    
+    /* Font Weights */
+    --pugo-font-normal: 400;
+    --pugo-font-medium: 500;
+    --pugo-font-semibold: 600;
+    --pugo-font-bold: 700;
+    
+    /* Line Heights */
+    --pugo-leading-none: 1;
+    --pugo-leading-tight: 1.25;
+    --pugo-leading-snug: 1.375;
+    --pugo-leading-normal: 1.5;
+    --pugo-leading-relaxed: 1.625;
+    
+    /* =========================================================================
+     * SPACING
+     * ========================================================================= */
+    
+    --pugo-space-0: 0;
+    --pugo-space-1: 4px;
+    --pugo-space-2: 8px;
+    --pugo-space-3: 12px;
+    --pugo-space-4: 16px;
+    --pugo-space-5: 20px;
+    --pugo-space-6: 24px;
+    --pugo-space-8: 32px;
+    --pugo-space-10: 40px;
+    --pugo-space-12: 48px;
+    --pugo-space-16: 64px;
+    
+    /* =========================================================================
+     * BORDERS & RADIUS
+     * ========================================================================= */
+    
+    --pugo-radius-sm: 4px;
+    --pugo-radius-md: 6px;
+    --pugo-radius-lg: 10px;
+    --pugo-radius-xl: 16px;
+    --pugo-radius-2xl: 20px;
+    --pugo-radius-full: 9999px;
+    
+    --pugo-border-width: 1px;
+    
+    /* =========================================================================
+     * SHADOWS
+     * ========================================================================= */
+    
+    --pugo-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --pugo-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.25);
+    --pugo-shadow-lg: 0 4px 20px rgba(0, 0, 0, 0.3);
+    --pugo-shadow-xl: 0 10px 40px rgba(0, 0, 0, 0.4);
+    --pugo-shadow-glow: 0 0 20px rgba(225, 29, 72, 0.3);
+    
+    /* =========================================================================
+     * TRANSITIONS
+     * ========================================================================= */
+    
+    --pugo-transition-fast: 0.1s ease;
+    --pugo-transition-normal: 0.15s ease;
+    --pugo-transition-slow: 0.3s ease;
+    
+    /* =========================================================================
+     * Z-INDEX SCALE
+     * ========================================================================= */
+    
+    --pugo-z-dropdown: 100;
+    --pugo-z-sticky: 200;
+    --pugo-z-overlay: 300;
+    --pugo-z-modal: 400;
+    --pugo-z-toast: 500;
+    --pugo-z-tooltip: 600;
+    
+    /* =========================================================================
+     * LAYOUT
+     * ========================================================================= */
+    
+    --pugo-sidebar-width: 260px;
+    --pugo-content-max-width: 1200px;
+    --pugo-header-height: 60px;
+    
+    /* =========================================================================
+     * COMPONENTS
+     * ========================================================================= */
+    
+    /* Buttons */
+    --pugo-btn-height: 36px;
+    --pugo-btn-height-sm: 28px;
+    --pugo-btn-height-lg: 44px;
+    --pugo-btn-padding-x: 16px;
+    --pugo-btn-padding-x-sm: 12px;
+    --pugo-btn-padding-x-lg: 20px;
+    
+    /* Inputs */
+    --pugo-input-height: 40px;
+    --pugo-input-padding-x: 12px;
+    --pugo-input-bg: var(--pugo-bg-tertiary);
+    --pugo-input-border: var(--pugo-border-color);
+    --pugo-input-focus-border: var(--pugo-accent-primary);
+    
+    /* Cards */
+    --pugo-card-bg: var(--pugo-bg-secondary);
+    --pugo-card-border: var(--pugo-border-color);
+    --pugo-card-radius: var(--pugo-radius-lg);
+    --pugo-card-padding: var(--pugo-space-6);
+    
+    /* Navigation */
+    --pugo-nav-item-height: 40px;
+    --pugo-nav-item-padding: 10px 12px;
+    --pugo-nav-item-radius: var(--pugo-radius-md);
+}
+
+/* =========================================================================
+ * LIGHT THEME (Optional - apply via class or media query)
+ * ========================================================================= */
+
+[data-theme="light"],
+.pugo-light {
+    --pugo-bg-primary: #ffffff;
+    --pugo-bg-secondary: #f8f9fa;
+    --pugo-bg-tertiary: #f0f1f3;
+    --pugo-bg-hover: #e9ecef;
+    --pugo-bg-active: #dee2e6;
+    --pugo-bg-elevated: #ffffff;
+    
+    --pugo-text-primary: #1a1a1a;
+    --pugo-text-secondary: #6c757d;
+    --pugo-text-muted: #adb5bd;
+    --pugo-text-disabled: #ced4da;
+    --pugo-text-inverse: #ffffff;
+    
+    --pugo-border-color: #dee2e6;
+    --pugo-border-light: #e9ecef;
+    --pugo-border-focus: #adb5bd;
+    
+    --pugo-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --pugo-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+    --pugo-shadow-lg: 0 4px 20px rgba(0, 0, 0, 0.1);
+    --pugo-shadow-xl: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* =========================================================================
+ * UTILITY CLASSES (Optional - for quick styling)
+ * ========================================================================= */
+
+/* Colors */
+.text-primary { color: var(--pugo-text-primary); }
+.text-secondary { color: var(--pugo-text-secondary); }
+.text-muted { color: var(--pugo-text-muted); }
+.text-success { color: var(--pugo-success); }
+.text-warning { color: var(--pugo-warning); }
+.text-danger { color: var(--pugo-danger); }
+.text-info { color: var(--pugo-info); }
+
+.bg-primary { background-color: var(--pugo-bg-primary); }
+.bg-secondary { background-color: var(--pugo-bg-secondary); }
+.bg-tertiary { background-color: var(--pugo-bg-tertiary); }
+
+/* Spacing */
+.p-0 { padding: var(--pugo-space-0); }
+.p-1 { padding: var(--pugo-space-1); }
+.p-2 { padding: var(--pugo-space-2); }
+.p-3 { padding: var(--pugo-space-3); }
+.p-4 { padding: var(--pugo-space-4); }
+.p-6 { padding: var(--pugo-space-6); }
+
+.m-0 { margin: var(--pugo-space-0); }
+.m-1 { margin: var(--pugo-space-1); }
+.m-2 { margin: var(--pugo-space-2); }
+.m-3 { margin: var(--pugo-space-3); }
+.m-4 { margin: var(--pugo-space-4); }
+.m-6 { margin: var(--pugo-space-6); }
+
+/* Border Radius */
+.rounded-sm { border-radius: var(--pugo-radius-sm); }
+.rounded-md { border-radius: var(--pugo-radius-md); }
+.rounded-lg { border-radius: var(--pugo-radius-lg); }
+.rounded-xl { border-radius: var(--pugo-radius-xl); }
+.rounded-full { border-radius: var(--pugo-radius-full); }
+
+/* Font Sizes */
+.text-xs { font-size: var(--pugo-text-xs); }
+.text-sm { font-size: var(--pugo-text-sm); }
+.text-base { font-size: var(--pugo-text-base); }
+.text-lg { font-size: var(--pugo-text-lg); }
+.text-xl { font-size: var(--pugo-text-xl); }
+.text-2xl { font-size: var(--pugo-text-2xl); }
+.text-3xl { font-size: var(--pugo-text-3xl); }
+
+/* Font Weights */
+.font-normal { font-weight: var(--pugo-font-normal); }
+.font-medium { font-weight: var(--pugo-font-medium); }
+.font-semibold { font-weight: var(--pugo-font-semibold); }
+.font-bold { font-weight: var(--pugo-font-bold); }
+
