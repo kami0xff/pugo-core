@@ -145,6 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $slug = $_POST['slug'] ?? '';
     if ($slug && isset($pages[$slug])) {
         $dir_path = dirname($pages[$slug]['path']);
+        $page_title = $pages[$slug]['title'];
         
         // Delete all files in the directory
         $files = glob($dir_path . '/*');
@@ -156,7 +157,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         
         // Delete the directory
         if (rmdir($dir_path)) {
-            $_SESSION['success'] = "Page '{$pages[$slug]['title']}' deleted successfully.";
+            // Auto-rebuild Hugo
+            $build_result = build_hugo();
+            if ($build_result['success']) {
+                $_SESSION['success'] = "Page '{$page_title}' deleted and site rebuilt successfully.";
+            } else {
+                $_SESSION['success'] = "Page '{$page_title}' deleted successfully.";
+                $_SESSION['warning'] = 'Hugo rebuild had warnings.';
+            }
         } else {
             $_SESSION['error'] = "Failed to delete page directory.";
         }

@@ -8,32 +8,20 @@ define('HUGO_ADMIN', true);
 
 $config = require dirname(__DIR__, 2) . '/config.php';
 require __DIR__ . '/../includes/functions.php';
+require __DIR__ . '/../includes/deploy.php';
 require __DIR__ . '/../includes/auth.php';
 require_auth();
 
-// Load deployment system
-require_once __DIR__ . '/../Deployment/DeployResult.php';
-require_once __DIR__ . '/../Deployment/DeploymentAdapter.php';
-require_once __DIR__ . '/../Deployment/DeploymentManager.php';
-require_once __DIR__ . '/../Deployment/Adapters/GitAdapter.php';
-require_once __DIR__ . '/../Config/PugoConfig.php';
-
-use Pugo\Deployment\DeploymentManager;
-use Pugo\Config\PugoConfig;
-
 $page_title = 'Settings';
 
-// Initialize deployment manager
-$pugoConfig = PugoConfig::getInstance(HUGO_ROOT);
-$deployManager = new DeploymentManager($pugoConfig, HUGO_ROOT);
-$gitAdapter = $deployManager->getAdapter('git');
-$gitStatus = $gitAdapter?->getStatus();
+// Get deployment status
+$deploy_status = get_deploy_status();
 
 // Handle form submissions
 $build_result = null;
 $deploy_result = null;
 $new_hash = null;
-$test_result = null;
+$setup_result = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check(); // Validate CSRF token
@@ -45,44 +33,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
                 
             case 'deploy':
-                // Validate deployment input
-                $validator = validate($_POST, [
-                    'commit_message' => 'required|min:3|max:200',
-                ]);
+                $message = trim($_POST['commit_message'] ?? 'Deploy: ' . date('Y-m-d H:i'));
                 
-                if ($validator->validate()) {
-                    $message = trim($_POST['commit_message']);
-                    
-                    // First build, then deploy
-                    $build_result = build_hugo();
-                    
-                    if ($build_result['success']) {
-                        $gitAdapter->configure([
-                            'branch' => $gitStatus['branch'] ?? 'main',
-                            'remote' => 'origin',
-                        ]);
-                        $deploy_result = $gitAdapter->deploy(HUGO_ROOT . '/public', [
-                            'message' => $message,
-                        ]);
-                        
-                        // Refresh git status after deploy
-                        $gitStatus = $gitAdapter->getStatus();
-                    }
+                // First build
+                $build_result = build_hugo();
+                
+                if ($build_result['success']) {
+                    // Then deploy
+                    $deploy_result = deploy_site($message);
+                    // Refresh status
+                    $deploy_status = get_deploy_status();
                 } else {
-                    $deploy_result = (object)[
-                        'isSuccess' => fn() => false,
-                        'isFailure' => fn() => true,
-                        'getMessage' => fn() => $validator->error('commit_message'),
-                    ];
+                    $deploy_result = ['success' => false, 'output' => 'Build failed. Cannot deploy.'];
                 }
                 break;
                 
-            case 'test_connection':
-                $gitAdapter->configure([
-                    'branch' => $gitStatus['branch'] ?? 'main',
-                    'remote' => 'origin',
-                ]);
-                $test_result = $gitAdapter->testConnection();
+            case 'setup_deploy':
+                $remote_url = trim($_POST['remote_url'] ?? '');
+                if (!empty($remote_url)) {
+                    $setup_result = init_deploy_repo($remote_url);
+                    $deploy_status = get_deploy_status();
+                }
                 break;
                 
             case 'generate_hash':
@@ -94,6 +65,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $new_hash = password_hash($_POST['password'], PASSWORD_DEFAULT);
                 }
                 break;
+                
+            case 'save_hugo_config':
+                $hugo_config_content = $_POST['hugo_config'] ?? '';
+                $hugo_config_path = HUGO_ROOT . '/config.toml';
+                
+                // Backup existing config
+                if (file_exists($hugo_config_path)) {
+                    copy($hugo_config_path, $hugo_config_path . '.backup');
+                }
+                
+                if (file_put_contents($hugo_config_path, $hugo_config_content)) {
+                    $_SESSION['config_success'] = 'Hugo configuration saved successfully!';
+                    // Rebuild site after config change
+                    $build_result = build_hugo();
+                } else {
+                    $_SESSION['config_error'] = 'Failed to save Hugo configuration';
+                }
+                break;
+        }
+    }
+}
+
+// Load Hugo config for display
+$hugo_config_path = HUGO_ROOT . '/config.toml';
+$hugo_config_content = '';
+if (file_exists($hugo_config_path)) {
+    $hugo_config_content = file_get_contents($hugo_config_path);
+} else {
+    // Check for hugo.toml or config.yaml
+    $alt_paths = [
+        HUGO_ROOT . '/hugo.toml',
+        HUGO_ROOT . '/config.yaml',
+        HUGO_ROOT . '/hugo.yaml',
+    ];
+    foreach ($alt_paths as $alt_path) {
+        if (file_exists($alt_path)) {
+            $hugo_config_path = $alt_path;
+            $hugo_config_content = file_get_contents($alt_path);
+            break;
         }
     }
 }
@@ -115,133 +125,71 @@ require __DIR__ . '/../includes/header.php';
 <div class="card" style="margin-bottom: 24px;">
     <h3 class="card-title" style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
         <?= pugo_icon('upload-cloud', 24) ?>
-        Deployment
+        Deploy to Production
     </h3>
     
+    <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 20px;">
+        Build Hugo and push the <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px;">public/</code> folder to your deployment repo.
+        Your server pulls from this repo to go live.
+    </p>
+    
+    <?php if ($deploy_status['configured']): ?>
+    <!-- Configured: Show status and deploy button -->
     <div class="grid grid-2" style="gap: 24px;">
-        <!-- Git Status -->
         <div style="background: var(--bg-tertiary); border-radius: 12px; padding: 20px;">
             <h4 style="font-size: 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
-                <?= pugo_icon('git-branch', 18) ?>
-                Git Repository Status
+                <?= pugo_icon('check-circle', 18) ?>
+                <span style="color: var(--accent-green);">Deployment Configured</span>
             </h4>
             
-            <?php if ($gitStatus && $gitStatus['configured']): ?>
-                <div style="display: flex; flex-direction: column; gap: 12px; font-size: 13px;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: var(--text-muted);">Branch</span>
-                        <span style="font-family: 'JetBrains Mono', monospace; color: var(--accent-primary);">
-                            <?= htmlspecialchars($gitStatus['branch']) ?>
-                        </span>
-                    </div>
-                    
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: var(--text-muted);">Remote</span>
-                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">
-                            <?= htmlspecialchars($gitStatus['remote_url'] ?? 'Not set') ?>
-                        </span>
-                    </div>
-                    
-                    <?php if ($gitStatus['last_commit']): ?>
-                    <div style="border-top: 1px solid var(--border-primary); padding-top: 12px; margin-top: 4px;">
-                        <div style="color: var(--text-muted); margin-bottom: 8px;">Last Commit</div>
-                        <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px;">
-                            <div style="color: var(--accent-secondary);">
-                                <?= htmlspecialchars(substr($gitStatus['last_commit']['hash'], 0, 8)) ?>
-                            </div>
-                            <div style="margin-top: 4px; color: var(--text-secondary);">
-                                <?= htmlspecialchars($gitStatus['last_commit']['message']) ?>
-                            </div>
-                            <div style="margin-top: 4px; color: var(--text-muted);">
-                                <?= htmlspecialchars($gitStatus['last_commit']['date']) ?>
-                            </div>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                    
-                    <?php if (!empty($gitStatus['pending_changes'])): ?>
-                    <div style="border-top: 1px solid var(--border-primary); padding-top: 12px; margin-top: 4px;">
-                        <div style="color: var(--accent-warning); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-                            <?= pugo_icon('alert-circle', 14) ?>
-                            <?= count($gitStatus['pending_changes']) ?> pending change<?= count($gitStatus['pending_changes']) > 1 ? 's' : '' ?>
-                        </div>
-                        <div style="max-height: 100px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 11px;">
-                            <?php foreach (array_slice($gitStatus['pending_changes'], 0, 5) as $change): ?>
-                            <div style="color: var(--text-muted); padding: 2px 0;">
-                                <span style="color: <?= $change['status'] === 'M' ? 'var(--accent-warning)' : ($change['status'] === 'A' ? 'var(--accent-success)' : 'var(--accent-error)') ?>;">
-                                    <?= htmlspecialchars($change['status']) ?>
-                                </span>
-                                <?= htmlspecialchars(basename($change['file'])) ?>
-                            </div>
-                            <?php endforeach; ?>
-                            <?php if (count($gitStatus['pending_changes']) > 5): ?>
-                            <div style="color: var(--text-muted); font-style: italic;">
-                                ...and <?= count($gitStatus['pending_changes']) - 5 ?> more
-                            </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <?php else: ?>
-                    <div style="border-top: 1px solid var(--border-primary); padding-top: 12px; margin-top: 4px;">
-                        <div style="color: var(--accent-success); display: flex; align-items: center; gap: 6px;">
-                            <?= pugo_icon('check-circle', 14) ?>
-                            Working tree clean
-                        </div>
-                    </div>
-                    <?php endif; ?>
+            <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px;">
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">Remote</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; max-width: 250px; overflow: hidden; text-overflow: ellipsis;" title="<?= htmlspecialchars($deploy_status['remote_url'] ?? '') ?>">
+                        <?= htmlspecialchars($deploy_status['remote_url'] ?? 'Not set') ?>
+                    </span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">Branch</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; color: var(--accent-primary);">
+                        <?= htmlspecialchars($deploy_status['branch'] ?? 'main') ?>
+                    </span>
                 </div>
                 
-                <form method="POST" style="margin-top: 16px;">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="test_connection">
-                    <button type="submit" class="btn btn-secondary btn-sm">
-                        <?= pugo_icon('wifi', 14) ?>
-                        Test Connection
-                    </button>
-                </form>
-                
-                <?php if ($test_result): ?>
-                <div style="margin-top: 12px; padding: 10px; border-radius: 8px; font-size: 12px;
-                            background: <?= $test_result->isSuccess() ? 'rgba(16, 185, 129, 0.1)' : 'rgba(225, 29, 72, 0.1)' ?>;
-                            color: <?= $test_result->isSuccess() ? '#10b981' : '#e11d48' ?>;">
-                    <?= pugo_icon($test_result->isSuccess() ? 'check' : 'x', 14) ?>
-                    <?= htmlspecialchars($test_result->getMessage()) ?>
+                <?php if ($deploy_status['last_commit']): ?>
+                <div style="border-top: 1px solid var(--border-color); padding-top: 10px; margin-top: 4px;">
+                    <div style="color: var(--text-muted); margin-bottom: 6px; font-size: 12px;">Last Deploy</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px;">
+                        <span style="color: var(--accent-secondary);"><?= htmlspecialchars($deploy_status['last_commit']['hash']) ?></span>
+                        <span style="color: var(--text-muted);"> · <?= htmlspecialchars($deploy_status['last_commit']['date']) ?></span>
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                        <?= htmlspecialchars($deploy_status['last_commit']['message']) ?>
+                    </div>
                 </div>
                 <?php endif; ?>
                 
-            <?php else: ?>
-                <div style="color: var(--text-muted); font-size: 13px;">
-                    <div style="display: flex; align-items: center; gap: 8px; color: var(--accent-warning);">
-                        <?= pugo_icon('alert-triangle', 16) ?>
-                        Git not initialized
-                    </div>
-                    <p style="margin-top: 8px;">
-                        Run <code style="background: var(--bg-secondary); padding: 2px 6px; border-radius: 4px;">git init</code> in your project root to enable Git deployment.
-                    </p>
+                <!-- Connection Test -->
+                <div style="border-top: 1px solid var(--border-color); padding-top: 10px; margin-top: 4px;">
+                    <button type="button" onclick="testConnection()" class="btn btn-sm btn-secondary" style="width: 100%;">
+                        <?= pugo_icon('link', 14) ?>
+                        Test Connection
+                    </button>
+                    <div id="connectionResult" style="margin-top: 8px; font-size: 11px; display: none;"></div>
                 </div>
-            <?php endif; ?>
+            </div>
         </div>
         
-        <!-- Deploy Form -->
         <div>
-            <h4 style="font-size: 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
-                <?= pugo_icon('send', 18) ?>
-                Deploy to Production
-            </h4>
-            
-            <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
-                Build Hugo site and push to Git remote. Netlify/Vercel/GitLab Pages will automatically deploy.
-            </p>
-            
             <?php if ($deploy_result): ?>
-            <div style="background: <?= $deploy_result->isSuccess() ? 'rgba(16, 185, 129, 0.1)' : 'rgba(225, 29, 72, 0.1)' ?>; 
-                        border: 1px solid <?= $deploy_result->isSuccess() ? '#10b981' : '#e11d48' ?>; 
+            <div style="background: <?= $deploy_result['success'] ? 'rgba(16, 185, 129, 0.1)' : 'rgba(225, 29, 72, 0.1)' ?>; 
+                        border: 1px solid <?= $deploy_result['success'] ? '#10b981' : '#e11d48' ?>; 
                         border-radius: 8px; padding: 12px; margin-bottom: 16px;">
-                <div style="font-weight: 600; margin-bottom: 8px; color: <?= $deploy_result->isSuccess() ? '#10b981' : '#e11d48' ?>; display: flex; align-items: center; gap: 8px;">
-                    <?= pugo_icon($deploy_result->isSuccess() ? 'check-circle' : 'x-circle', 16) ?>
-                    <?= $deploy_result->isSuccess() ? 'Deployment Successful' : 'Deployment Failed' ?>
+                <div style="font-weight: 600; margin-bottom: 8px; color: <?= $deploy_result['success'] ? '#10b981' : '#e11d48' ?>; display: flex; align-items: center; gap: 8px;">
+                    <?= pugo_icon($deploy_result['success'] ? 'check-circle' : 'x-circle', 16) ?>
+                    <?= $deploy_result['success'] ? 'Deployed Successfully!' : 'Deployment Failed' ?>
                 </div>
-                <pre style="font-size: 11px; color: var(--text-secondary); white-space: pre-wrap; margin: 0; font-family: 'JetBrains Mono', monospace;"><?= htmlspecialchars($deploy_result->getMessage()) ?></pre>
+                <pre style="font-size: 11px; color: var(--text-secondary); white-space: pre-wrap; margin: 0; font-family: 'JetBrains Mono', monospace;"><?= htmlspecialchars($deploy_result['output']) ?></pre>
             </div>
             <?php endif; ?>
             
@@ -252,18 +200,60 @@ require __DIR__ . '/../includes/header.php';
                 <div class="form-group" style="margin-bottom: 16px;">
                     <label class="form-label">Commit Message</label>
                     <input type="text" name="commit_message" class="form-input" 
-                           placeholder="content: Update articles" 
-                           value="content: Update - <?= date('Y-m-d H:i') ?>"
-                           required minlength="3" maxlength="200">
+                           placeholder="Deploy: Update content" 
+                           value="Deploy: <?= date('Y-m-d H:i') ?>">
                 </div>
                 
-                <button type="submit" class="btn btn-primary" <?= !($gitStatus['configured'] ?? false) ? 'disabled' : '' ?>>
-                    <?= pugo_icon('upload-cloud', 16) ?>
-                    Build &amp; Deploy
+                <button type="submit" class="btn btn-primary" style="width: 100%; padding: 14px;">
+                    <?= pugo_icon('upload-cloud', 18) ?>
+                    Build &amp; Deploy to Production
                 </button>
             </form>
         </div>
     </div>
+    
+    <?php else: ?>
+    <!-- Not configured: Show setup form -->
+    <div style="background: var(--bg-tertiary); border-radius: 12px; padding: 24px; max-width: 500px;">
+        <h4 style="font-size: 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+            <?= pugo_icon('git-branch', 18) ?>
+            Setup Deployment
+        </h4>
+        
+        <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
+            Enter your deployment repository URL. This is where your built site will be pushed.
+        </p>
+        
+        <?php if ($setup_result): ?>
+        <div style="background: <?= $setup_result['success'] ? 'rgba(16, 185, 129, 0.1)' : 'rgba(225, 29, 72, 0.1)' ?>; 
+                    padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 13px;
+                    color: <?= $setup_result['success'] ? '#10b981' : '#e11d48' ?>;">
+            <?= htmlspecialchars($setup_result['output']) ?>
+        </div>
+        <?php endif; ?>
+        
+        <form method="POST">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="setup_deploy">
+            
+            <div class="form-group" style="margin-bottom: 16px;">
+                <label class="form-label">Git Remote URL</label>
+                <input type="text" name="remote_url" class="form-input" 
+                       placeholder="git@github.com:user/mysite.git"
+                       required>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
+                    SSH format: <code>git@github.com:user/repo.git</code><br>
+                    HTTPS format: <code>https://github.com/user/repo.git</code>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">
+                <?= pugo_icon('check', 16) ?>
+                Configure Deployment
+            </button>
+        </form>
+    </div>
+    <?php endif; ?>
 </div>
 
 <div class="grid grid-2" style="gap: 24px;">
@@ -385,6 +375,141 @@ require __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<!-- Hugo Configuration Editor -->
+<div class="card" style="margin-top: 24px;">
+    <h3 class="card-title" style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+        <?= pugo_icon('settings', 20) ?>
+        Hugo Configuration
+        <span style="font-size: 12px; font-weight: normal; color: var(--text-muted); margin-left: auto;">
+            <?= htmlspecialchars(basename($hugo_config_path)) ?>
+        </span>
+    </h3>
+    
+    <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 13px;">
+        Edit your Hugo site configuration. Changes will automatically trigger a site rebuild.
+        <a href="https://gohugo.io/getting-started/configuration/" target="_blank" style="color: var(--accent-primary);">
+            <?= pugo_icon('external-link', 12) ?> Configuration docs
+        </a>
+    </p>
+    
+    <?php if (isset($_SESSION['config_success'])): ?>
+    <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; color: #10b981; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+        <?= pugo_icon('check-circle', 16) ?>
+        <?= $_SESSION['config_success']; unset($_SESSION['config_success']); ?>
+    </div>
+    <?php endif; ?>
+    
+    <?php if (isset($_SESSION['config_error'])): ?>
+    <div style="background: rgba(225, 29, 72, 0.1); border: 1px solid #e11d48; color: #e11d48; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+        <?= pugo_icon('x-circle', 16) ?>
+        <?= $_SESSION['config_error']; unset($_SESSION['config_error']); ?>
+    </div>
+    <?php endif; ?>
+    
+    <form method="POST" id="hugoConfigForm">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="save_hugo_config">
+        
+        <div style="position: relative;">
+            <textarea name="hugo_config" id="hugoConfigEditor" 
+                style="width: 100%; height: 400px; font-family: 'JetBrains Mono', monospace; font-size: 13px; 
+                       background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color);
+                       border-radius: 8px; padding: 16px; resize: vertical; line-height: 1.5;"
+            ><?= htmlspecialchars($hugo_config_content) ?></textarea>
+        </div>
+        
+        <div style="display: flex; gap: 12px; margin-top: 16px; align-items: center;">
+            <button type="submit" class="btn btn-primary">
+                <?= pugo_icon('save', 16) ?>
+                Save Configuration
+            </button>
+            
+            <button type="button" class="btn btn-secondary" onclick="restoreBackup()">
+                <?= pugo_icon('rotate-cw', 16) ?>
+                Restore Backup
+            </button>
+            
+            <span style="font-size: 12px; color: var(--text-muted); margin-left: auto;">
+                Ctrl+S to save
+            </span>
+        </div>
+    </form>
+    
+    <!-- Quick Config Reference -->
+    <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+        <h4 style="font-size: 14px; margin-bottom: 12px;">Common Configuration Options</h4>
+        <div class="grid grid-3" style="gap: 16px;">
+            <div>
+                <div style="font-size: 12px; font-weight: 600; margin-bottom: 6px;">Basic</div>
+                <div style="font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">
+                    baseURL = "https://..."<br>
+                    title = "Site Title"<br>
+                    languageCode = "en"
+                </div>
+            </div>
+            <div>
+                <div style="font-size: 12px; font-weight: 600; margin-bottom: 6px;">Build</div>
+                <div style="font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">
+                    buildDrafts = false<br>
+                    buildFuture = false<br>
+                    minify = true
+                </div>
+            </div>
+            <div>
+                <div style="font-size: 12px; font-weight: 600; margin-bottom: 6px;">Params</div>
+                <div style="font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">
+                    [params]<br>
+                    &nbsp;&nbsp;description = "..."<br>
+                    &nbsp;&nbsp;author = "..."
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Keyboard shortcut for saving config
+document.getElementById('hugoConfigEditor').addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        document.getElementById('hugoConfigForm').submit();
+    }
+});
+
+// Restore backup function
+function restoreBackup() {
+    if (confirm('This will restore the previous configuration. Continue?')) {
+        fetch('<?= $hugo_config_path ?>.backup')
+            .then(r => r.text())
+            .then(content => {
+                document.getElementById('hugoConfigEditor').value = content;
+                alert('Backup restored. Click "Save Configuration" to apply.');
+            })
+            .catch(() => alert('No backup found.'));
+    }
+}
+
+// Test GitHub/Git connection
+function testConnection() {
+    const resultEl = document.getElementById('connectionResult');
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = '<span style="color: var(--text-muted);">Testing connection...</span>';
+    
+    fetch('api.php?action=test_deploy_connection')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                resultEl.innerHTML = '<span style="color: var(--accent-green);">✓ Connection successful!</span><br><span style="color: var(--text-muted);">' + (data.output || '') + '</span>';
+            } else {
+                resultEl.innerHTML = '<span style="color: var(--accent-primary);">✗ Connection failed</span><br><span style="color: var(--text-muted);">' + (data.output || 'Unknown error') + '</span>';
+            }
+        })
+        .catch(err => {
+            resultEl.innerHTML = '<span style="color: var(--accent-primary);">✗ Error: ' + err.message + '</span>';
+        });
+}
+</script>
 
 <!-- Quick Reference -->
 <div class="card" style="margin-top: 24px;">

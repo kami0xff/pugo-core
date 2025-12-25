@@ -93,7 +93,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $body = $_POST['body'] ?? '';
         
         if (save_article($file_path, $frontmatter, $body)) {
-            $_SESSION['success'] = 'Article created successfully!';
+            // Auto-rebuild Hugo
+            $build_result = build_hugo();
+            if ($build_result['success']) {
+                $_SESSION['success'] = 'Article created and site rebuilt successfully!';
+            } else {
+                $_SESSION['success'] = 'Article created successfully!';
+                $_SESSION['warning'] = 'Hugo rebuild had warnings.';
+            }
             
             // Get relative path for edit redirect
             $relative_path = str_replace($content_dir . '/', '', $file_path);

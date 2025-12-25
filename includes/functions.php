@@ -543,30 +543,21 @@ function build_hugo() {
     $output = [];
     $return_code = 0;
     
-    // Ensure public directory is writable before build
-    $public_dir = HUGO_ROOT . '/public';
-    if (is_dir($public_dir)) {
-        exec('chown -R www-data:www-data ' . escapeshellarg($public_dir) . ' 2>&1');
-        exec('chmod -R 775 ' . escapeshellarg($public_dir) . ' 2>&1');
-    }
+    // Get hugo command from config, with fallback
+    $hugo_command = $config['hugo_command'] ?? ('cd ' . HUGO_ROOT . ' && hugo --minify');
     
     // Build Hugo site
-    exec($config['hugo_command'] . ' 2>&1', $output, $return_code);
+    exec($hugo_command . ' 2>&1', $output, $return_code);
     
     if ($return_code === 0) {
-        // Fix permissions after build (in case new files were created)
-        exec('chown -R www-data:www-data ' . escapeshellarg($public_dir) . ' 2>&1');
-        exec('chmod -R 775 ' . escapeshellarg($public_dir) . ' 2>&1');
-        
-        // Run Pagefind to rebuild search index
+        // Run Pagefind to rebuild search index (optional, don't fail if not available)
         $pagefind_output = [];
         exec('cd ' . HUGO_ROOT . ' && pagefind --site public 2>&1', $pagefind_output, $pagefind_code);
-        $output = array_merge($output, ['', '--- Pagefind ---'], $pagefind_output);
         
-        // If pagefind fails, still report Hugo success
-        if ($pagefind_code !== 0) {
-            $output[] = '(Pagefind indexing had warnings but Hugo build succeeded)';
+        if ($pagefind_code === 0) {
+            $output = array_merge($output, ['', '--- Pagefind ---'], $pagefind_output);
         }
+        // Don't report pagefind errors - it's optional
     }
     
     return [
@@ -999,5 +990,125 @@ function delete_tag($tag, $lang = 'en') {
 function get_tag_list($lang = 'en') {
     $tags = get_all_tags($lang);
     return array_keys($tags);
+}
+
+/**
+ * Detect which Hugo template will be used for content
+ * 
+ * Hugo template lookup order:
+ * 1. layouts/<type>/<layout>.html
+ * 2. layouts/<section>/<layout>.html  
+ * 3. layouts/_default/<layout>.html
+ * 
+ * @param string $section The content section (e.g., 'blog', 'tutorials')
+ * @param array $frontmatter The frontmatter array
+ * @param bool $is_index Whether this is an _index.md file
+ * @return array Template info with 'path', 'type', 'exists'
+ */
+function detect_hugo_template($section, $frontmatter = [], $is_index = false) {
+    $layout = $frontmatter['layout'] ?? null;
+    $type = $frontmatter['type'] ?? $section;
+    $kind = $is_index ? 'list' : 'single';
+    
+    $layouts_dir = HUGO_ROOT . '/layouts';
+    $templates_to_check = [];
+    
+    // If explicit layout is set in frontmatter
+    if ($layout) {
+        $templates_to_check[] = "{$type}/{$layout}.html";
+        $templates_to_check[] = "{$section}/{$layout}.html";
+        $templates_to_check[] = "_default/{$layout}.html";
+    }
+    
+    // Standard lookup order
+    $templates_to_check[] = "{$type}/{$kind}.html";
+    $templates_to_check[] = "{$section}/{$kind}.html";
+    $templates_to_check[] = "_default/{$kind}.html";
+    
+    // Also check for baseof
+    $templates_to_check[] = "_default/baseof.html";
+    
+    foreach ($templates_to_check as $template) {
+        $full_path = $layouts_dir . '/' . $template;
+        if (file_exists($full_path)) {
+            return [
+                'path' => $template,
+                'full_path' => $full_path,
+                'type' => $kind,
+                'exists' => true,
+                'explicit' => !empty($layout)
+            ];
+        }
+    }
+    
+    // No template found - Hugo will use theme or built-in
+    return [
+        'path' => "_default/{$kind}.html",
+        'full_path' => null,
+        'type' => $kind,
+        'exists' => false,
+        'explicit' => false
+    ];
+}
+
+/**
+ * Get all content files that use a specific template
+ * 
+ * @param string $template_path Relative path like '_default/single.html'
+ * @param string $lang Language code
+ * @return array List of content files
+ */
+function get_content_using_template($template_path, $lang = 'en') {
+    global $config;
+    
+    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$lang]['content_dir'];
+    if (!is_dir($content_dir)) return [];
+    
+    // Parse template path to understand what it handles
+    $parts = explode('/', $template_path);
+    $filename = basename($template_path, '.html');
+    $folder = count($parts) > 1 ? $parts[0] : '_default';
+    
+    $is_list = ($filename === 'list' || strpos($filename, 'list') !== false);
+    $is_single = ($filename === 'single' || strpos($filename, 'single') !== false);
+    $is_default = ($folder === '_default');
+    
+    $matching_content = [];
+    
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($content_dir, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+    
+    foreach ($iterator as $file) {
+        if (!$file->isFile() || $file->getExtension() !== 'md') continue;
+        
+        $path = $file->getPathname();
+        $relative_path = str_replace($content_dir . '/', '', $path);
+        $is_index = (basename($path) === '_index.md');
+        
+        // Get section from path
+        $path_parts = explode('/', $relative_path);
+        $section = $path_parts[0] ?? '';
+        
+        // Parse frontmatter
+        $content = file_get_contents($path);
+        $parsed = parse_frontmatter($content);
+        $fm = $parsed['frontmatter'];
+        
+        // Check if this content would use this template
+        $detected = detect_hugo_template($section, $fm, $is_index);
+        
+        if ($detected['path'] === $template_path) {
+            $matching_content[] = [
+                'path' => $relative_path,
+                'title' => $fm['title'] ?? basename($path, '.md'),
+                'section' => $section,
+                'is_index' => $is_index
+            ];
+        }
+    }
+    
+    return $matching_content;
 }
 

@@ -6,10 +6,12 @@
  */
 
 define('HUGO_ADMIN', true);
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/includes/functions.php';
-require_once __DIR__ . '/Actions/bootstrap.php';
-require_once __DIR__ . '/includes/auth.php';
+
+$config = require dirname(__DIR__, 2) . '/config.php';
+require __DIR__ . '/../includes/functions.php';
+require __DIR__ . '/../Actions/bootstrap.php';
+require __DIR__ . '/../includes/auth.php';
+require_auth();
 
 $current_lang = $_GET['lang'] ?? 'en';
 $view = $_GET['view'] ?? 'tags';

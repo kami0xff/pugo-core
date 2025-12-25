@@ -95,6 +95,72 @@ switch ($action) {
         break;
 
     // =========================================================================
+    // DEPLOY ENDPOINTS
+    // =========================================================================
+    
+    case 'deploy_status':
+        require_once __DIR__ . '/../includes/deploy.php';
+        $status = get_deploy_status();
+        echo json_encode($status);
+        break;
+        
+    case 'deploy':
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['success' => false, 'error' => 'Method not allowed']);
+            exit;
+        }
+        
+        require_once __DIR__ . '/../includes/deploy.php';
+        
+        // First build Hugo
+        $build_result = build_hugo();
+        
+        if (!$build_result['success']) {
+            echo json_encode([
+                'success' => false, 
+                'output' => "Build failed:\n" . $build_result['output']
+            ]);
+            exit;
+        }
+        
+        // Then deploy
+        $message = $_POST['message'] ?? 'Deploy: ' . date('Y-m-d H:i');
+        $deploy_result = deploy_site($message);
+        
+        echo json_encode([
+            'success' => $deploy_result['success'],
+            'output' => "Build:\n" . $build_result['output'] . "\n\nDeploy:\n" . $deploy_result['output']
+        ]);
+        break;
+        
+    case 'test_deploy_connection':
+        require_once __DIR__ . '/../includes/deploy.php';
+        
+        $ssh_key = DEPLOY_SSH_KEY;
+        if (!file_exists($ssh_key)) {
+            echo json_encode([
+                'success' => false,
+                'output' => 'Deploy key not found at ' . $ssh_key
+            ]);
+            exit;
+        }
+        
+        // Test SSH connection using the git environment
+        $env = get_git_env();
+        $cmd = $env . 'ssh -T git@github.com 2>&1';
+        exec($cmd, $output, $code);
+        
+        // GitHub returns code 1 on successful auth (with message "successfully authenticated")
+        $success = ($code === 1 && strpos(implode("\n", $output), 'successfully authenticated') !== false);
+        
+        echo json_encode([
+            'success' => $success,
+            'output' => implode("\n", $output)
+        ]);
+        break;
+
+    // =========================================================================
     // TAG ENDPOINTS
     // =========================================================================
     
@@ -189,6 +255,10 @@ switch ($action) {
         $body = $_POST['body'] ?? null;
         
         $result = Actions::updateContent($lang)->handle($file, $frontmatter, $body);
+        // Auto-rebuild Hugo after update
+        if ($result->success) {
+            build_hugo();
+        }
         echo $result->toJson();
         break;
         
@@ -207,6 +277,10 @@ switch ($action) {
         $body = $_POST['body'] ?? '';
         
         $result = Actions::createContent($lang)->handle($section, $slug, $frontmatter, $body, $category);
+        // Auto-rebuild Hugo after create
+        if ($result->success) {
+            build_hugo();
+        }
         echo $result->toJson();
         break;
         
@@ -219,6 +293,10 @@ switch ($action) {
         }
         
         $result = Actions::deleteContent($lang)->handle($_POST['file'] ?? '');
+        // Auto-rebuild Hugo after deletion
+        if ($result->success) {
+            build_hugo();
+        }
         echo $result->toJson();
         break;
 

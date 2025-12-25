@@ -6,6 +6,8 @@ define('HUGO_ADMIN', true);
 
 $config = require dirname(__DIR__, 2) . '/config.php';
 require __DIR__ . '/../includes/functions.php';
+require __DIR__ . '/../includes/content-types.php';
+require __DIR__ . '/../includes/dynamic-fields.php';
 require __DIR__ . '/../includes/auth.php';
 require_auth();
 
@@ -33,6 +35,12 @@ $content = file_get_contents($file_path);
 $parsed = parse_frontmatter($content);
 $frontmatter = $parsed['frontmatter'];
 $body = $parsed['body'];
+
+// Detect content type early (needed for form processing)
+$path_parts_early = explode('/', $file);
+$section_early = $path_parts_early[0] ?? '';
+$is_index_early = (basename($file) === '_index.md');
+$content_type_early = detect_content_type($section_early, $frontmatter, $is_index_early);
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -81,19 +89,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $new_frontmatter['draft'] = true;
     }
     
+    // Parse dynamic content type fields
+    $dynamic_fields = parse_content_type_form_data($content_type_early, $_POST);
+    $new_frontmatter = array_merge($new_frontmatter, $dynamic_fields);
+    
+    // Preserve content type in frontmatter if it has custom fields
+    $type_info = get_content_type($content_type_early);
+    if (!empty($type_info['fields']) && $content_type_early !== 'article' && $content_type_early !== 'page') {
+        $new_frontmatter['type'] = $content_type_early;
+    }
+    
     $new_body = $_POST['body'] ?? '';
     
     if (save_article($file_path, $new_frontmatter, $new_body)) {
-        $_SESSION['success'] = 'Article saved successfully!';
-        
-        // Trigger Hugo build if requested
-        if (isset($_POST['build']) && $_POST['build']) {
-            $result = build_hugo();
-            if ($result['success']) {
-                $_SESSION['success'] .= ' Site rebuilt.';
-            } else {
-                $_SESSION['warning'] = 'Article saved, but Hugo build failed.';
-            }
+        // Auto-rebuild Hugo
+        $build_result = build_hugo();
+        if ($build_result['success']) {
+            $_SESSION['success'] = 'Article saved and site rebuilt successfully!';
+        } else {
+            $_SESSION['success'] = 'Article saved successfully!';
+            $_SESSION['warning'] = 'Hugo rebuild had warnings.';
         }
         
         header('Location: edit.php?file=' . urlencode($file) . '&lang=' . $current_lang);
@@ -113,6 +128,11 @@ $translations = $translation_key ? get_translation_status($translation_key) : []
 $path_parts = explode('/', $file);
 $section = $path_parts[0] ?? '';
 $category = count($path_parts) > 2 ? $path_parts[1] : null;
+
+// Detect content type
+$is_index = (basename($file) === '_index.md');
+$content_type = detect_content_type($section, $frontmatter, $is_index);
+$content_type_info = get_content_type($content_type);
 
 // Get section color
 $sections_list = get_sections_with_counts($current_lang);
@@ -558,7 +578,36 @@ require __DIR__ . '/../includes/header.php';
         </span>
     </div>
     
-    <?php $tags = $frontmatter['tags'] ?? []; if (!empty($tags)): ?>
+    <?php 
+    // Detect which Hugo template is used
+    $is_index = (basename($file) === '_index.md');
+    $template_info = detect_hugo_template($section, $frontmatter, $is_index);
+    ?>
+    <div class="article-info-item">
+        <span class="article-info-label">Template</span>
+        <?php if ($template_info['exists']): ?>
+        <a href="template-edit.php?file=<?= urlencode($template_info['path']) ?>" 
+           class="article-info-value" 
+           style="font-family: monospace; font-size: 12px; color: var(--accent-blue); text-decoration: none;"
+           title="Click to edit this template">
+            <?= pugo_icon('code', 12) ?>
+            <?= htmlspecialchars($template_info['path']) ?>
+        </a>
+        <?php else: ?>
+        <span class="article-info-value" style="font-family: monospace; font-size: 12px; color: var(--text-muted);" title="Using Hugo default or theme template">
+            <?= htmlspecialchars($template_info['path']) ?> (theme/default)
+        </span>
+        <?php endif; ?>
+    </div>
+    
+    <?php 
+    $tags = $frontmatter['tags'] ?? [];
+    // Ensure tags is an array (YAML might parse it as string)
+    if (is_string($tags)) {
+        $tags = array_map('trim', explode(',', $tags));
+    }
+    if (!empty($tags) && is_array($tags)): 
+    ?>
     <div class="article-info-item" style="margin-left: auto;">
         <span class="article-info-label">Tags</span>
         <div class="article-info-tags">
@@ -593,14 +642,7 @@ require __DIR__ . '/../includes/header.php';
         </p>
     </div>
     <div style="display: flex; gap: 12px;">
-        <button type="button" class="btn btn-primary" onclick="publishChanges()" id="publishBtn" title="Commit & push to trigger CI/CD build">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
-                <path d="M22 2L11 13"/>
-                <path d="M22 2l-7 20-4-9-9-4 20-7z"/>
-            </svg>
-            <span id="publishText">Publish</span>
-        </button>
-        <button type="button" class="btn btn-secondary" onclick="rebuildSite()" id="rebuildBtn" title="Local rebuild (preview)">
+        <button type="button" class="btn btn-secondary" onclick="rebuildSite()" id="rebuildBtn" title="Rebuild site for preview">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
                 <path d="M23 4v6h-6"/>
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
@@ -678,6 +720,9 @@ require __DIR__ . '/../includes/header.php';
             </div>
         </div>
     </div>
+    
+    <!-- Dynamic Content Type Fields -->
+    <?= render_content_type_fields($content_type, $frontmatter) ?>
     
     <!-- Editor with Preview -->
     <div class="card" style="margin-bottom: 24px; padding: 0; overflow: hidden;">
@@ -1739,59 +1784,7 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
-// Publish changes (commit & push to trigger CI/CD)
-function publishChanges() {
-    const btn = document.getElementById('publishBtn');
-    const text = document.getElementById('publishText');
-    
-    // Prompt for commit message
-    const message = prompt('Enter commit message:', 'Content update');
-    if (!message) return;
-    
-    btn.disabled = true;
-    text.textContent = 'Publishing...';
-    btn.style.opacity = '0.7';
-    
-    const formData = new FormData();
-    formData.append('message', message);
-    
-    fetch('api.php?action=publish', {
-        method: 'POST',
-        body: formData
-    })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                text.textContent = '✓ Published!';
-                btn.style.background = 'rgba(16, 185, 129, 0.8)';
-                showNotification(data.message || 'Changes published! CI/CD pipeline triggered.', 'success');
-            } else {
-                text.textContent = '✗ Failed';
-                btn.style.background = 'rgba(225, 29, 72, 0.8)';
-                showNotification('Publish failed: ' + (data.error || data.output || 'Unknown error'), 'error');
-            }
-            
-            // Reset after 3 seconds
-            setTimeout(() => {
-                btn.disabled = false;
-                text.textContent = 'Publish';
-                btn.style.opacity = '1';
-                btn.style.background = '';
-            }, 3000);
-        })
-        .catch(err => {
-            text.textContent = '✗ Error';
-            showNotification('Network error: ' + err.message, 'error');
-            
-            setTimeout(() => {
-                btn.disabled = false;
-                text.textContent = 'Publish';
-                btn.style.opacity = '1';
-            }, 3000);
-        });
-}
-
-// Rebuild site function (local)
+// Rebuild site function (local preview)
 function rebuildSite() {
     const btn = document.getElementById('rebuildBtn');
     const text = document.getElementById('rebuildText');
@@ -1930,5 +1923,8 @@ function removeRelated(btn) {
 }
 
 </script>
+
+<?= render_dynamic_field_styles() ?>
+<?= render_dynamic_field_scripts() ?>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

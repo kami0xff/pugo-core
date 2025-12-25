@@ -4,7 +4,19 @@
  * 
  * Note: CSRF functions (csrf_field, csrf_check) are loaded in auth.php
  */
-$current_page = basename($_SERVER['PHP_SELF'], '.php');
+// Get current page - use router's value if available, otherwise fallback to PHP_SELF
+$current_page = $GLOBALS['pugo_current_page'] ?? basename($_SERVER['PHP_SELF'], '.php');
+
+// Handle cases where router detected the page but PHP_SELF is still index
+if ($current_page === 'index' && isset($_SERVER['REQUEST_URI'])) {
+    $uri_path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    $uri_path = trim($uri_path, '/');
+    $uri_path = preg_replace('#^admin/?#', '', $uri_path);
+    $uri_path = preg_replace('#\.php$#', '', $uri_path);
+    if ($uri_path && $uri_path !== 'index') {
+        $current_page = $uri_path;
+    }
+}
 
 // Load centralized Icons (if not already loaded)
 if (!class_exists('Pugo\Assets\Icons')) {
@@ -832,6 +844,11 @@ if (!function_exists('pugo_icon')) {
             opacity: 0;
             visibility: hidden;
             transition: all 0.2s ease;
+            /* Override .main-content > * constraints */
+            max-width: none !important;
+            width: 100% !important;
+            margin-left: 0 !important;
+            padding: 0 !important;
         }
         
         .modal-overlay.active {
@@ -895,15 +912,15 @@ if (!function_exists('pugo_icon')) {
             
             <nav class="nav-section">
                 <div class="nav-section-title">Main</div>
-                <a href="index.php" class="nav-item <?= $current_page === 'index' ? 'active' : '' ?>">
+                <a href="index.php" class="nav-item <?= $current_page === 'index' || $current_page === 'dashboard' ? 'active' : '' ?>">
                     <?= pugo_icon('grid') ?>
                     Dashboard
                 </a>
-                <a href="articles.php" class="nav-item <?= $current_page === 'articles' ? 'active' : '' ?>">
-                    <?= pugo_icon('file-text') ?>
-                    Articles
+                <a href="articles.php" class="nav-item <?= in_array($current_page, ['articles', 'edit', 'new']) ? 'active' : '' ?>">
+                    <?= pugo_icon('layers') ?>
+                    Content
                 </a>
-                <a href="pages.php" class="nav-item <?= $current_page === 'pages' || $current_page === 'page-edit' ? 'active' : '' ?>">
+                <a href="pages.php" class="nav-item <?= in_array($current_page, ['pages', 'page-edit']) ? 'active' : '' ?>">
                     <?= pugo_icon('layout') ?>
                     Pages
                 </a>
@@ -918,6 +935,10 @@ if (!function_exists('pugo_icon')) {
                 <a href="components.php" class="nav-item <?= $current_page === 'components' ? 'active' : '' ?>">
                     <?= pugo_icon('box') ?>
                     Site Components
+                </a>
+                <a href="templates.php" class="nav-item <?= in_array($current_page, ['templates', 'template-edit']) ? 'active' : '' ?>">
+                    <?= pugo_icon('code') ?>
+                    Templates
                 </a>
             </nav>
             
@@ -952,7 +973,13 @@ if (!function_exists('pugo_icon')) {
             </nav>
             
             <div class="sidebar-footer">
-                <a href="settings.php" class="nav-item">
+                <!-- Quick Deploy Button -->
+                <button type="button" onclick="quickDeploy()" class="nav-item" style="width: 100%; text-align: left; border: 1px solid var(--accent-green); background: rgba(16, 185, 129, 0.1); cursor: pointer; font-family: inherit;">
+                    <?= pugo_icon('upload-cloud') ?>
+                    <span>Build & Deploy</span>
+                </button>
+                
+                <a href="settings.php" class="nav-item" style="margin-top: 8px;">
                     <?= pugo_icon('settings') ?>
                     Settings
                 </a>
@@ -962,6 +989,136 @@ if (!function_exists('pugo_icon')) {
                 </a>
             </div>
         </aside>
+        
+        <!-- Deploy Modal -->
+        <div id="deployModal" class="modal-overlay" onclick="if(event.target === this) closeDeployModal()">
+            <div class="modal" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3 class="modal-title"><?= pugo_icon('upload-cloud', 20) ?> Build & Deploy</h3>
+                    <button type="button" class="modal-close" onclick="closeDeployModal()">
+                        <?= pugo_icon('x', 20) ?>
+                    </button>
+                </div>
+                
+                <div id="deployStatus" style="margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; gap: 12px; padding: 16px; background: var(--bg-tertiary); border-radius: 8px;">
+                        <div id="deployStatusIcon"><?= pugo_icon('git-branch', 24) ?></div>
+                        <div>
+                            <div id="deployStatusText" style="font-weight: 600;">Ready to deploy</div>
+                            <div id="deployRemoteUrl" style="font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <form id="deployForm" onsubmit="executeDeploy(event)">
+                    <div class="form-group">
+                        <label class="form-label">Commit Message</label>
+                        <input type="text" id="deployMessage" class="form-input" 
+                               placeholder="Deploy: Update content" 
+                               value="Deploy: <?= date('Y-m-d H:i') ?>">
+                    </div>
+                    
+                    <div id="deployOutput" style="display: none; margin-bottom: 16px;">
+                        <pre style="background: var(--bg-tertiary); padding: 12px; border-radius: 8px; font-size: 11px; font-family: 'JetBrains Mono', monospace; max-height: 200px; overflow-y: auto; white-space: pre-wrap;"></pre>
+                    </div>
+                    
+                    <div style="display: flex; gap: 12px;">
+                        <button type="submit" id="deployBtn" class="btn btn-primary" style="flex: 1;">
+                            <?= pugo_icon('upload-cloud', 16) ?>
+                            <span>Build & Deploy</span>
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="closeDeployModal()">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <script>
+        function quickDeploy() {
+            document.getElementById('deployModal').classList.add('active');
+            checkDeployStatus();
+        }
+        
+        function closeDeployModal() {
+            document.getElementById('deployModal').classList.remove('active');
+        }
+        
+        function checkDeployStatus() {
+            fetch('api.php?action=deploy_status')
+                .then(r => r.json())
+                .then(data => {
+                    const urlEl = document.getElementById('deployRemoteUrl');
+                    const textEl = document.getElementById('deployStatusText');
+                    
+                    if (data.configured) {
+                        urlEl.textContent = data.remote_url || 'Remote configured';
+                        textEl.textContent = data.last_commit ? 
+                            'Last: ' + data.last_commit.message + ' (' + data.last_commit.date + ')' : 
+                            'Ready to deploy';
+                    } else {
+                        urlEl.textContent = 'Not configured';
+                        textEl.textContent = 'Go to Settings to configure';
+                        textEl.style.color = 'var(--accent-yellow)';
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('deployRemoteUrl').textContent = 'Unable to check status';
+                });
+        }
+        
+        function executeDeploy(e) {
+            e.preventDefault();
+            
+            const btn = document.getElementById('deployBtn');
+            const output = document.getElementById('deployOutput');
+            const pre = output.querySelector('pre');
+            const message = document.getElementById('deployMessage').value;
+            
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></span> Deploying...';
+            output.style.display = 'block';
+            pre.textContent = 'Building Hugo...\n';
+            
+            fetch('api.php?action=deploy', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content
+                },
+                body: 'message=' + encodeURIComponent(message)
+            })
+            .then(r => r.json())
+            .then(data => {
+                pre.textContent = data.output || 'Deployed!';
+                
+                if (data.success) {
+                    btn.innerHTML = '<?= pugo_icon('check', 16) ?> Deployed!';
+                    btn.style.background = 'var(--accent-green)';
+                    setTimeout(() => {
+                        closeDeployModal();
+                        btn.disabled = false;
+                        btn.innerHTML = '<?= pugo_icon('upload-cloud', 16) ?> <span>Build & Deploy</span>';
+                        btn.style.background = '';
+                    }, 2000);
+                } else {
+                    btn.innerHTML = '<?= pugo_icon('x', 16) ?> Failed';
+                    btn.style.background = 'var(--accent-primary)';
+                    btn.disabled = false;
+                    setTimeout(() => {
+                        btn.innerHTML = '<?= pugo_icon('upload-cloud', 16) ?> <span>Build & Deploy</span>';
+                        btn.style.background = '';
+                    }, 3000);
+                }
+            })
+            .catch(err => {
+                pre.textContent = 'Error: ' + err.message;
+                btn.disabled = false;
+                btn.innerHTML = '<?= pugo_icon('upload-cloud', 16) ?> <span>Build & Deploy</span>';
+            });
+        }
+        </script>
         
         <!-- Main Content -->
         <main class="main-content">

@@ -3,17 +3,25 @@
  * Pugo Admin - Page Editor
  * 
  * Create and edit standalone pages (Contact, Terms, About, etc.)
+ * Uses the same editor interface as the article editor for consistency.
  */
 define('HUGO_ADMIN', true);
 
 $config = require dirname(__DIR__, 2) . '/config.php';
 require __DIR__ . '/../includes/functions.php';
+require __DIR__ . '/../includes/content-types.php';
+require __DIR__ . '/../includes/dynamic-fields.php';
 require __DIR__ . '/../includes/auth.php';
 require_auth();
 
 $current_lang = $_GET['lang'] ?? 'en';
 $is_new = isset($_GET['new']);
 $page_slug = $_GET['page'] ?? '';
+
+// Translation variables (used when creating translations of existing pages)
+$translate_from = '';
+$source_lang = 'en';
+$target_lang = $current_lang;
 
 if (!isset($config['languages'][$current_lang])) {
     $current_lang = 'en';
@@ -37,6 +45,37 @@ if ($is_new) {
     $page_data['layout'] = $_GET['layout'] ?? 'default';
     $page_slug = $_GET['slug'] ?? '';
     
+    // Check if this is a translation request
+    $translate_from = $_GET['translate_from'] ?? '';
+    $source_lang = $_GET['source_lang'] ?? 'en';
+    $target_lang = $_GET['target_lang'] ?? $current_lang;
+    
+    if ($translate_from) {
+        // Load source page content
+        $source_content_dir = $source_lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . ($config['languages'][$source_lang]['content_dir'] ?? 'content');
+        $source_path = $source_content_dir . '/' . $translate_from . '/_index.md';
+        
+        if (file_exists($source_path)) {
+            $source_content = file_get_contents($source_path);
+            $source_parsed = parse_frontmatter($source_content);
+            
+            // Pre-fill with source content for translation
+            $page_data['title'] = $source_parsed['frontmatter']['title'] ?? '';
+            $page_data['description'] = $source_parsed['frontmatter']['description'] ?? '';
+            if (is_array($page_data['description'])) {
+                $page_data['description'] = implode(' ', $page_data['description']);
+            }
+            $page_data['layout'] = $source_parsed['frontmatter']['layout'] ?? 'default';
+            $page_data['body'] = $source_parsed['body'] ?? '';
+            $page_data['frontmatter'] = $source_parsed['frontmatter'];
+            $page_slug = $translate_from;
+            $current_lang = $target_lang;
+            $content_dir = $target_lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . ($config['languages'][$target_lang]['content_dir'] ?? 'content');
+            
+            $page_title = 'Create ' . ($config['languages'][$target_lang]['name'] ?? $target_lang) . ' Translation';
+        }
+    }
+    
     // Auto-generate slug from title if not provided
     if (!$page_slug && $page_data['title']) {
         $page_slug = generate_slug($page_data['title']);
@@ -59,9 +98,15 @@ if ($is_new) {
     $content = file_get_contents($page_path);
     $parsed = parse_frontmatter($content);
     
+    // Ensure description is always a string (YAML might parse it as array)
+    $description = $parsed['frontmatter']['description'] ?? '';
+    if (is_array($description)) {
+        $description = implode(' ', $description);
+    }
+    
     $page_data = array_merge($page_data, [
         'title' => $parsed['frontmatter']['title'] ?? '',
-        'description' => $parsed['frontmatter']['description'] ?? '',
+        'description' => $description,
         'layout' => $parsed['frontmatter']['layout'] ?? 'default',
         'draft' => !empty($parsed['frontmatter']['draft']),
         'body' => $parsed['body'] ?? '',
@@ -72,11 +117,8 @@ if ($is_new) {
 }
 
 // Handle form submission
-$message = null;
-$error = null;
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    csrf_check(); // Validate CSRF token
+    csrf_check();
     
     $new_title = trim($_POST['title'] ?? '');
     $new_description = trim($_POST['description'] ?? '');
@@ -86,85 +128,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $new_slug = trim($_POST['slug'] ?? '') ?: generate_slug($new_title);
     
     if (empty($new_title)) {
-        $error = 'Title is required';
+        $_SESSION['error'] = 'Title is required';
     } elseif (empty($new_slug)) {
-        $error = 'Slug is required';
+        $_SESSION['error'] = 'Slug is required';
+    } elseif (!preg_match('/^[a-z0-9-]+$/', $new_slug)) {
+        $_SESSION['error'] = 'Slug can only contain lowercase letters, numbers, and hyphens';
     } else {
-        // Validate slug format
-        if (!preg_match('/^[a-z0-9-]+$/', $new_slug)) {
-            $error = 'Slug can only contain lowercase letters, numbers, and hyphens';
-        } else {
-            $target_dir = $content_dir . '/' . $new_slug;
-            $target_file = $target_dir . '/_index.md';
+        $target_dir = $content_dir . '/' . $new_slug;
+        $target_file = $target_dir . '/_index.md';
+        $error = null;
+        
+        // Check for conflicts
+        if (!$is_new && $new_slug !== $page_slug && is_dir($target_dir)) {
+            $error = "A page with slug '{$new_slug}' already exists";
+        }
+        if ($is_new && is_dir($target_dir)) {
+            $error = "A page with slug '{$new_slug}' already exists";
+        }
+        
+        if (!$error) {
+            // Build frontmatter
+            $frontmatter = [
+                'title' => $new_title,
+                'description' => $new_description,
+                'date' => date('Y-m-d'),
+                'lastmod' => date('Y-m-d'),
+            ];
             
-            // Check for conflicts (different slug for existing page)
+            if ($new_layout && $new_layout !== 'default') {
+                $frontmatter['layout'] = $new_layout;
+            }
+            
+            if ($new_draft) {
+                $frontmatter['draft'] = true;
+            }
+            
+            // Preserve other frontmatter fields when editing
+            if (!$is_new && isset($page_data['frontmatter'])) {
+                $preserve_keys = ['date', 'author', 'aliases', 'url', 'menu', 'weight'];
+                foreach ($preserve_keys as $key) {
+                    if (isset($page_data['frontmatter'][$key]) && !isset($frontmatter[$key])) {
+                        $frontmatter[$key] = $page_data['frontmatter'][$key];
+                    }
+                }
+            }
+            
+            // Create directory if needed
+            if (!is_dir($target_dir)) {
+                mkdir($target_dir, 0755, true);
+            }
+            
+            // If slug changed, remove old directory
             if (!$is_new && $new_slug !== $page_slug) {
-                if (is_dir($target_dir)) {
-                    $error = "A page with slug '{$new_slug}' already exists";
+                $old_dir = $content_dir . '/' . $page_slug;
+                if (is_dir($old_dir)) {
+                    $old_files = glob($old_dir . '/*');
+                    foreach ($old_files as $file) {
+                        if (is_file($file)) unlink($file);
+                    }
+                    rmdir($old_dir);
                 }
             }
             
-            // Check for conflicts (new page)
-            if ($is_new && is_dir($target_dir)) {
-                $error = "A page with slug '{$new_slug}' already exists";
-            }
-            
-            if (!$error) {
-                // Build frontmatter
-                $frontmatter = [
-                    'title' => $new_title,
-                    'description' => $new_description,
-                    'date' => date('Y-m-d'),
-                    'lastmod' => date('Y-m-d'),
-                ];
-                
-                if ($new_layout && $new_layout !== 'default') {
-                    $frontmatter['layout'] = $new_layout;
-                }
-                
-                if ($new_draft) {
-                    $frontmatter['draft'] = true;
-                }
-                
-                // Preserve other frontmatter fields when editing
-                if (!$is_new && isset($page_data['frontmatter'])) {
-                    $preserve_keys = ['date', 'author', 'aliases', 'url', 'menu', 'weight'];
-                    foreach ($preserve_keys as $key) {
-                        if (isset($page_data['frontmatter'][$key]) && !isset($frontmatter[$key])) {
-                            $frontmatter[$key] = $page_data['frontmatter'][$key];
-                        }
-                    }
-                }
-                
-                // Create directory if needed
-                if (!is_dir($target_dir)) {
-                    mkdir($target_dir, 0755, true);
-                }
-                
-                // If slug changed, remove old directory
-                if (!$is_new && $new_slug !== $page_slug) {
-                    $old_dir = $content_dir . '/' . $page_slug;
-                    if (is_dir($old_dir)) {
-                        // Remove old files
-                        $old_files = glob($old_dir . '/*');
-                        foreach ($old_files as $file) {
-                            if (is_file($file)) {
-                                unlink($file);
-                            }
-                        }
-                        rmdir($old_dir);
-                    }
-                }
-                
-                // Save the file
-                if (save_article($target_file, $frontmatter, $new_body)) {
-                    $_SESSION['success'] = $is_new ? 'Page created successfully!' : 'Page saved successfully!';
-                    header('Location: page-edit.php?page=' . urlencode($new_slug) . '&lang=' . $current_lang);
-                    exit;
+            // Save the file
+            if (save_article($target_file, $frontmatter, $new_body)) {
+                // Auto-rebuild Hugo
+                $build_result = build_hugo();
+                if ($build_result['success']) {
+                    $_SESSION['success'] = ($is_new ? 'Page created' : 'Page saved') . ' and site rebuilt successfully!';
                 } else {
-                    $error = 'Failed to save page. Check file permissions.';
+                    $_SESSION['success'] = ($is_new ? 'Page created' : 'Page saved') . ' successfully!';
+                    $_SESSION['warning'] = 'Hugo rebuild had warnings.';
                 }
+                header('Location: page-edit.php?page=' . urlencode($new_slug) . '&lang=' . $current_lang);
+                exit;
+            } else {
+                $_SESSION['error'] = 'Failed to save page. Check file permissions.';
             }
+        } else {
+            $_SESSION['error'] = $error;
         }
     }
     
@@ -177,73 +219,173 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $page_slug = $new_slug;
 }
 
-// Check for session messages
-if (isset($_SESSION['success'])) {
-    $message = $_SESSION['success'];
-    unset($_SESSION['success']);
+// Get available layouts from Hugo
+$available_layouts = ['default' => 'Default'];
+$layouts_dir = HUGO_ROOT . '/layouts/page';
+if (is_dir($layouts_dir)) {
+    foreach (scandir($layouts_dir) as $file) {
+        if (pathinfo($file, PATHINFO_EXTENSION) === 'html') {
+            $name = pathinfo($file, PATHINFO_FILENAME);
+            $available_layouts[$name] = ucwords(str_replace(['-', '_'], ' ', $name));
+        }
+    }
 }
-if (isset($_SESSION['error'])) {
-    $error = $_SESSION['error'];
-    unset($_SESSION['error']);
-}
-
-require __DIR__ . '/../includes/header.php';
-?>
-
-<style>
-.page-editor {
-    display: grid;
-    grid-template-columns: 1fr 320px;
-    gap: 24px;
-    align-items: start;
-}
-
-@media (max-width: 1100px) {
-    .page-editor {
-        grid-template-columns: 1fr;
+// Also check _default folder
+$default_layouts_dir = HUGO_ROOT . '/layouts/_default';
+if (is_dir($default_layouts_dir)) {
+    foreach (scandir($default_layouts_dir) as $file) {
+        if (pathinfo($file, PATHINFO_EXTENSION) === 'html' && !isset($available_layouts[pathinfo($file, PATHINFO_FILENAME)])) {
+            $name = pathinfo($file, PATHINFO_FILENAME);
+            if (!in_array($name, ['baseof', 'list'])) { // Skip base templates
+                $available_layouts[$name] = ucwords(str_replace(['-', '_'], ' ', $name));
+            }
+        }
     }
 }
 
-.editor-main {
+require __DIR__ . '/../includes/header.php';
+
+// Include shared editor styles
+require __DIR__ . '/../includes/editor-styles.php';
+?>
+
+<style>
+/* Page-specific styles */
+.page-info-bar {
     display: flex;
-    flex-direction: column;
-    gap: 24px;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    padding: 16px 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    margin-bottom: 24px;
 }
 
+.page-info-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.page-info-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+}
+
+.page-info-value {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.page-info-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* Language tabs */
+.lang-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.lang-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 14px;
+    transition: all 0.15s ease;
+}
+
+.lang-tab:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.lang-tab.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+}
+
+.lang-tab .flag {
+    font-size: 16px;
+}
+
+.translation-notice {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: var(--radius-sm);
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.translation-notice svg {
+    width: 24px;
+    height: 24px;
+    color: var(--accent-primary);
+    flex-shrink: 0;
+}
+
+.translation-notice-text {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.translation-notice-text strong {
+    color: var(--text-primary);
+}
+
+/* Sidebar cards */
 .editor-sidebar {
     display: flex;
     flex-direction: column;
     gap: 20px;
-    position: sticky;
-    top: 32px;
 }
 
-.editor-card {
+.sidebar-card {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     overflow: hidden;
 }
 
-.editor-card-header {
-    padding: 16px 20px;
+.sidebar-card-header {
+    padding: 14px 16px;
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-tertiary);
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13px;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
 
-.editor-card-header svg {
-    width: 18px;
-    height: 18px;
+.sidebar-card-header svg {
+    width: 16px;
+    height: 16px;
     opacity: 0.7;
 }
 
-.editor-card-body {
-    padding: 20px;
+.sidebar-card-body {
+    padding: 16px;
 }
 
 .slug-input-group {
@@ -256,114 +398,23 @@ require __DIR__ . '/../includes/header.php';
 }
 
 .slug-prefix {
-    padding: 12px 16px;
+    padding: 10px 12px;
     background: var(--bg-primary);
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: 13px;
     font-family: 'JetBrains Mono', monospace;
     border-right: 1px solid var(--border-color);
-    white-space: nowrap;
 }
 
 .slug-input-group input {
     flex: 1;
-    padding: 12px 16px;
+    padding: 10px 12px;
     background: transparent;
     border: none;
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: 13px;
     font-family: 'JetBrains Mono', monospace;
     outline: none;
-}
-
-.title-input {
-    font-size: 24px !important;
-    font-weight: 600 !important;
-    padding: 16px 20px !important;
-}
-
-.preview-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    color: var(--text-secondary);
-    text-decoration: none;
-    padding: 10px 16px;
-    background: var(--bg-tertiary);
-    border-radius: var(--radius-sm);
-    transition: all 0.15s;
-}
-
-.preview-link:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-}
-
-.preview-link svg {
-    width: 14px;
-    height: 14px;
-}
-
-/* Save bar */
-.save-bar {
-    position: fixed;
-    bottom: 0;
-    left: 260px;
-    right: 0;
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border-color);
-    padding: 16px 48px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    z-index: 100;
-}
-
-.save-bar-info {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    color: var(--text-secondary);
-    font-size: 13px;
-}
-
-.save-bar-actions {
-    display: flex;
-    gap: 12px;
-}
-
-/* Toast */
-.toast-message {
-    position: fixed;
-    top: 24px;
-    right: 24px;
-    padding: 14px 20px;
-    border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 14px;
-    font-weight: 500;
-    z-index: 1000;
-    animation: toastIn 0.3s ease;
-}
-
-.toast-message.success {
-    background: rgba(16, 185, 129, 0.15);
-    border: 1px solid #10b981;
-    color: #10b981;
-}
-
-.toast-message.error {
-    background: rgba(225, 29, 72, 0.15);
-    border: 1px solid #e11d48;
-    color: #e11d48;
-}
-
-@keyframes toastIn {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
 }
 
 .checkbox-field {
@@ -384,27 +435,24 @@ require __DIR__ . '/../includes/header.php';
     font-size: 14px;
     color: var(--text-secondary);
 }
+
+/* Two column layout */
+.editor-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 24px;
+    align-items: start;
+}
+
+@media (max-width: 1100px) {
+    .editor-layout {
+        grid-template-columns: 1fr;
+    }
+    .editor-sidebar {
+        order: -1;
+    }
+}
 </style>
-
-<?php if ($message): ?>
-<div class="toast-message success">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="20 6 9 17 4 12"/>
-    </svg>
-    <?= htmlspecialchars($message) ?>
-</div>
-<?php endif; ?>
-
-<?php if ($error): ?>
-<div class="toast-message error">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="15" y1="9" x2="9" y2="15"/>
-        <line x1="9" y1="9" x2="15" y2="15"/>
-    </svg>
-    <?= htmlspecialchars($error) ?>
-</div>
-<?php endif; ?>
 
 <!-- Breadcrumb -->
 <div class="breadcrumb">
@@ -415,85 +463,271 @@ require __DIR__ . '/../includes/header.php';
     <span><?= $is_new ? 'New Page' : htmlspecialchars($page_data['title']) ?></span>
 </div>
 
-<!-- Page Header -->
-<div class="page-header">
-    <div>
-        <h1 class="page-title"><?= $is_new ? 'Create New Page' : 'Edit Page' ?></h1>
-        <p class="page-subtitle">
-            <?php if ($is_new): ?>
-                Fill in the details to create a new standalone page
-            <?php else: ?>
-                Editing: /<?= htmlspecialchars($page_slug) ?>/
-            <?php endif; ?>
-        </p>
+<?php if (!$is_new): ?>
+<!-- Page Info Bar -->
+<div class="page-info-bar">
+    <div class="page-info-item">
+        <span class="page-info-label">Type</span>
+        <span class="page-info-badge" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">
+            📄 Standalone Page
+        </span>
     </div>
     
-    <?php if (!$is_new): ?>
-    <a href="<?= htmlspecialchars($config['site_url'] ?? '') ?>/<?= htmlspecialchars($page_slug) ?>/" 
-       target="_blank" class="preview-link">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-            <polyline points="15 3 21 3 21 9"/>
-            <line x1="10" y1="14" x2="21" y2="3"/>
-        </svg>
-        View Page
-    </a>
+    <div class="page-info-item">
+        <span class="page-info-label">URL</span>
+        <span class="page-info-value" style="font-family: monospace; font-size: 12px; color: var(--text-secondary);">
+            /<?= htmlspecialchars($page_slug) ?>/
+        </span>
+    </div>
+    
+    <div class="page-info-item">
+        <span class="page-info-label">Language</span>
+        <span class="page-info-value">
+            <?= $config['languages'][$current_lang]['flag'] ?? '🌐' ?> 
+            <?= $config['languages'][$current_lang]['name'] ?? $current_lang ?>
+        </span>
+    </div>
+    
+    <div class="page-info-item">
+        <span class="page-info-label">Template</span>
+        <span class="page-info-value"><?= htmlspecialchars($available_layouts[$page_data['layout']] ?? $page_data['layout']) ?></span>
+    </div>
+    
+    <?php if (!empty($page_data['draft'])): ?>
+    <div class="page-info-item">
+        <span class="page-info-badge" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b;">
+            📝 Draft
+        </span>
+    </div>
     <?php endif; ?>
 </div>
 
+<?php endif; ?>
+
+<!-- Language Tabs - Show when editing OR when creating a translation -->
+<?php if (count($config['languages']) > 1 && (!$is_new || (isset($translate_from) && $translate_from))): ?>
+<div class="lang-tabs" style="margin-bottom: 24px;">
+    <?php foreach ($config['languages'] as $lang => $lang_config): 
+        // Check if this language version exists
+        $lang_content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . ($lang_config['content_dir'] ?? 'content');
+        $lang_page_path = $lang_content_dir . '/' . $page_slug . '/_index.md';
+        $lang_exists = file_exists($lang_page_path);
+        $is_current = $lang === $current_lang;
+    ?>
+    <?php if ($is_current): ?>
+    <span class="lang-tab active">
+        <span class="flag"><?= $lang_config['flag'] ?></span>
+        <?= $lang_config['name'] ?>
+        <?php if ($is_new): ?><span style="font-size: 10px;">(Creating)</span><?php endif; ?>
+    </span>
+    <?php elseif ($lang_exists): ?>
+    <a href="page-edit.php?page=<?= urlencode($page_slug) ?>&lang=<?= $lang ?>" class="lang-tab">
+        <span class="flag"><?= $lang_config['flag'] ?></span>
+        <?= $lang_config['name'] ?>
+    </a>
+    <?php else: ?>
+    <a href="page-edit.php?new=1&translate_from=<?= urlencode($page_slug) ?>&source_lang=<?= $current_lang ?>&target_lang=<?= $lang ?>" 
+       class="lang-tab" style="opacity: 0.5;">
+        <span class="flag"><?= $lang_config['flag'] ?></span>
+        <?= $lang_config['name'] ?>
+        <span style="font-size: 10px;">+ Create</span>
+    </a>
+    <?php endif; ?>
+    <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
+<?php if ($is_new && isset($translate_from) && $translate_from): ?>
+<!-- Translation Notice -->
+<div class="translation-notice">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+        <path d="M2 12h20"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </svg>
+    <div class="translation-notice-text">
+        <strong>Creating Translation:</strong> 
+        You are creating a <strong><?= $config['languages'][$target_lang]['name'] ?? $target_lang ?></strong> version of the 
+        <strong><?= $config['languages'][$source_lang]['name'] ?? $source_lang ?></strong> page "<?= htmlspecialchars($page_data['title']) ?>".
+        The content has been pre-filled for you to translate.
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Page Header -->
+<div class="page-header">
+    <div>
+        <h1 class="page-title"><?= $is_new ? 'Create New Page' : htmlspecialchars($page_data['title']) ?></h1>
+        <p class="page-subtitle">
+            <?php if ($is_new): ?>
+                Create a new standalone page for your site
+            <?php else: ?>
+                Last modified: <?= isset($page_path) ? time_ago(filemtime($page_path)) : 'unknown' ?>
+            <?php endif; ?>
+        </p>
+    </div>
+    <div style="display: flex; gap: 12px;">
+        <?php if (!$is_new): ?>
+        <a href="<?= htmlspecialchars($config['site_url'] ?? '') ?>/<?= htmlspecialchars($page_slug) ?>/" 
+           target="_blank" class="btn btn-secondary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+            View Page
+        </a>
+        <?php endif; ?>
+    </div>
+</div>
+
+<?php if (!$is_new): 
+    // Detect which Hugo template is used
+    $template_info = detect_hugo_template($page_slug, $page_data, true);
+?>
+<!-- Page Info Bar -->
+<div class="article-info-bar" style="margin-bottom: 16px;">
+    <div class="article-info-item">
+        <span class="article-info-label">Slug</span>
+        <span class="article-info-value" style="font-family: monospace; font-size: 12px;">
+            <?= htmlspecialchars($page_slug) ?>
+        </span>
+    </div>
+    
+    <div class="article-info-item">
+        <span class="article-info-label">Language</span>
+        <span class="article-info-value">
+            <?= $config['languages'][$current_lang]['flag'] ?? '🌐' ?> 
+            <?= $config['languages'][$current_lang]['name'] ?? $current_lang ?>
+        </span>
+    </div>
+    
+    <div class="article-info-item">
+        <span class="article-info-label">Template</span>
+        <?php if ($template_info['exists']): ?>
+        <a href="template-edit.php?file=<?= urlencode($template_info['path']) ?>" 
+           class="article-info-value" 
+           style="font-family: monospace; font-size: 12px; color: var(--accent-blue); text-decoration: none;"
+           title="Click to edit this template">
+            <?= pugo_icon('code', 12) ?>
+            <?= htmlspecialchars($template_info['path']) ?>
+        </a>
+        <?php else: ?>
+        <span class="article-info-value" style="font-family: monospace; font-size: 12px; color: var(--text-muted);" title="Using Hugo default or theme template">
+            <?= htmlspecialchars($template_info['path']) ?> (theme/default)
+        </span>
+        <?php endif; ?>
+    </div>
+    
+    <div class="article-info-item">
+        <span class="article-info-label">File</span>
+        <span class="article-info-value" style="font-family: monospace; font-size: 12px; color: var(--text-secondary);">
+            <?= htmlspecialchars($page_slug) ?>/_index.md
+        </span>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if (isset($_SESSION['success'])): ?>
+<div style="background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; color: #10b981; padding: 12px 16px; border-radius: 8px; margin-bottom: 24px;">
+    <?= $_SESSION['success']; unset($_SESSION['success']); ?>
+</div>
+<?php endif; ?>
+
+<?php if (isset($_SESSION['error'])): ?>
+<div style="background: rgba(225, 29, 72, 0.1); border: 1px solid #e11d48; color: #e11d48; padding: 12px 16px; border-radius: 8px; margin-bottom: 24px;">
+    <?= $_SESSION['error']; unset($_SESSION['error']); ?>
+</div>
+<?php endif; ?>
+
+<!-- Edit Form -->
 <form method="POST" id="pageForm">
     <?= csrf_field() ?>
-    <div class="page-editor">
+    
+    <div class="editor-layout">
         <!-- Main Content -->
-        <div class="editor-main">
-            <!-- Title -->
-            <div class="editor-card">
-                <div class="editor-card-body" style="padding: 0;">
-                    <input type="text" name="title" id="titleInput"
-                           class="form-input title-input" 
-                           placeholder="Page Title"
-                           value="<?= htmlspecialchars($page_data['title']) ?>"
-                           required
+        <div>
+            <!-- Title & Description -->
+            <div class="card" style="margin-bottom: 24px;">
+                <div class="form-group">
+                    <label class="form-label">Title *</label>
+                    <input type="text" name="title" id="titleInput" class="form-input" 
+                           value="<?= htmlspecialchars($page_data['title']) ?>" required
+                           style="font-size: 18px; font-weight: 600;"
                            oninput="updateSlugFromTitle()">
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Description <span style="font-weight: normal; color: var(--text-muted);">(max 160 chars for SEO)</span></label>
+                    <textarea name="description" id="descInput" class="form-input" rows="2" maxlength="200"><?= htmlspecialchars($page_data['description']) ?></textarea>
+                    <div style="text-align: right; font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                        <span id="descCount"><?= strlen($page_data['description']) ?></span>/160
+                    </div>
                 </div>
             </div>
             
-            <!-- Content -->
-            <div class="editor-card">
-                <div class="editor-card-header">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
+            <!-- Editor with Preview -->
+            <div class="card" style="margin-bottom: 24px; padding: 0; overflow: hidden;">
+                <?php 
+                $show_shortcodes = true;
+                require __DIR__ . '/../includes/editor-toolbar.php'; 
+                ?>
+                
+                <div class="editor-container">
+                    <!-- Editor Pane -->
+                    <div class="editor-pane">
+                        <textarea name="body" id="editor" class="form-input" 
+                                  placeholder="Write your page content here using Markdown..."><?= htmlspecialchars($page_data['body']) ?></textarea>
+                    </div>
+                    
+                    <!-- Preview Pane -->
+                    <div class="preview-pane">
+                        <div class="preview-header">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            Live Preview
+                        </div>
+                        <div class="preview-content" id="previewContent">
+                            <p style="color: var(--text-muted);">Start typing to see preview...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Save Button -->
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <a href="pages.php?lang=<?= $current_lang ?>" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                        <polyline points="17 21 17 13 7 13 7 21"/>
+                        <polyline points="7 3 7 8 15 8"/>
                     </svg>
-                    Content
-                </div>
-                <div class="editor-card-body">
-                    <textarea name="body" id="editor" class="markdown-editor"><?= htmlspecialchars($page_data['body']) ?></textarea>
-                </div>
+                    <?= $is_new ? 'Create Page' : 'Save Changes' ?>
+                </button>
             </div>
         </div>
         
         <!-- Sidebar -->
         <div class="editor-sidebar">
             <!-- URL / Slug -->
-            <div class="editor-card">
-                <div class="editor-card-header">
+            <div class="sidebar-card">
+                <div class="sidebar-card-header">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                         <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
                     </svg>
-                    URL
+                    URL Slug
                 </div>
-                <div class="editor-card-body">
+                <div class="sidebar-card-body">
                     <div class="slug-input-group">
                         <span class="slug-prefix">/</span>
                         <input type="text" name="slug" id="slugInput"
                                value="<?= htmlspecialchars($page_slug) ?>"
                                placeholder="page-slug"
-                               pattern="[a-z0-9-]+"
-                               <?= $is_new ? '' : '' ?>>
+                               pattern="[a-z0-9-]+">
                         <span class="slug-prefix">/</span>
                     </div>
                     <small style="color: var(--text-muted); font-size: 11px; display: block; margin-top: 8px;">
@@ -502,48 +736,40 @@ require __DIR__ . '/../includes/header.php';
                 </div>
             </div>
             
-            <!-- SEO -->
-            <div class="editor-card">
-                <div class="editor-card-header">
+            <!-- Template -->
+            <div class="sidebar-card">
+                <div class="sidebar-card-header">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"/>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="3" y1="9" x2="21" y2="9"/>
+                        <line x1="9" y1="21" x2="9" y2="9"/>
                     </svg>
-                    SEO
+                    Template
                 </div>
-                <div class="editor-card-body">
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label">Meta Description</label>
-                        <textarea name="description" class="form-input" rows="3"
-                                  placeholder="Brief description for search engines (max 160 chars)"
-                                  maxlength="160"><?= htmlspecialchars($page_data['description']) ?></textarea>
-                        <small style="color: var(--text-muted); font-size: 11px;">
-                            <span id="descCount"><?= strlen($page_data['description']) ?></span>/160 characters
-                        </small>
-                    </div>
+                <div class="sidebar-card-body">
+                    <select name="layout" class="form-input">
+                        <?php foreach ($available_layouts as $value => $label): ?>
+                        <option value="<?= htmlspecialchars($value) ?>" <?= $page_data['layout'] === $value ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($label) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small style="color: var(--text-muted); font-size: 11px; display: block; margin-top: 8px;">
+                        Choose how this page is rendered
+                    </small>
                 </div>
             </div>
             
-            <!-- Settings -->
-            <div class="editor-card">
-                <div class="editor-card-header">
+            <!-- Publishing -->
+            <div class="sidebar-card">
+                <div class="sidebar-card-header">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"/>
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                     </svg>
                     Settings
                 </div>
-                <div class="editor-card-body">
-                    <div class="form-group">
-                        <label class="form-label">Template</label>
-                        <select name="layout" class="form-input">
-                            <option value="default" <?= $page_data['layout'] === 'default' ? 'selected' : '' ?>>Default</option>
-                            <option value="contact" <?= $page_data['layout'] === 'contact' ? 'selected' : '' ?>>Contact Page</option>
-                            <option value="full-width" <?= $page_data['layout'] === 'full-width' ? 'selected' : '' ?>>Full Width</option>
-                            <option value="narrow" <?= $page_data['layout'] === 'narrow' ? 'selected' : '' ?>>Narrow Content</option>
-                        </select>
-                    </div>
-                    
+                <div class="sidebar-card-body">
                     <label class="checkbox-field">
                         <input type="checkbox" name="draft" <?= $page_data['draft'] ? 'checked' : '' ?>>
                         <span>Save as draft (unpublished)</span>
@@ -553,16 +779,16 @@ require __DIR__ . '/../includes/header.php';
             
             <?php if (!$is_new && count($config['languages']) > 1): ?>
             <!-- Translations -->
-            <div class="editor-card">
-                <div class="editor-card-header">
+            <div class="sidebar-card">
+                <div class="sidebar-card-header">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"/>
                         <line x1="2" y1="12" x2="22" y2="12"/>
                         <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                     </svg>
-                    Translations
+                    Languages
                 </div>
-                <div class="editor-card-body">
+                <div class="sidebar-card-body">
                     <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                         <?php foreach ($config['languages'] as $lang => $lang_config): 
                             $lang_content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . ($lang_config['content_dir'] ?? 'content');
@@ -570,10 +796,13 @@ require __DIR__ . '/../includes/header.php';
                             $is_current = $lang === $current_lang;
                         ?>
                         <a href="page-edit.php?page=<?= urlencode($page_slug) ?>&lang=<?= $lang ?>"
-                           class="translation-item <?= $is_current ? 'active' : '' ?> <?= $lang_page_exists ? 'exists' : 'missing' ?>"
-                           style="<?= $is_current ? 'border-color: var(--accent-primary);' : '' ?>">
-                            <span class="flag" style="font-size: 20px;"><?= $lang_config['flag'] ?></span>
-                            <span class="lang-name" style="font-size: 10px;"><?= $lang_config['name'] ?></span>
+                           style="display: flex; flex-direction: column; align-items: center; padding: 8px 12px; 
+                                  background: <?= $is_current ? 'var(--accent-primary)' : 'var(--bg-tertiary)' ?>; 
+                                  border-radius: var(--radius-sm); text-decoration: none;
+                                  color: <?= $is_current ? 'white' : 'var(--text-secondary)' ?>;
+                                  opacity: <?= $lang_page_exists || $is_current ? '1' : '0.5' ?>;">
+                            <span style="font-size: 20px;"><?= $lang_config['flag'] ?></span>
+                            <span style="font-size: 10px; margin-top: 2px;"><?= strtoupper($lang) ?></span>
                         </a>
                         <?php endforeach; ?>
                     </div>
@@ -582,59 +811,22 @@ require __DIR__ . '/../includes/header.php';
             <?php endif; ?>
         </div>
     </div>
-    
-    <!-- Save Bar -->
-    <div class="save-bar">
-        <div class="save-bar-info">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="16" x2="12" y2="12"/>
-                <line x1="12" y1="8" x2="12.01" y2="8"/>
-            </svg>
-            <span>
-                <?php if ($is_new): ?>
-                    Creating new page
-                <?php else: ?>
-                    Editing: <strong><?= htmlspecialchars($page_data['title']) ?></strong>
-                <?php endif; ?>
-            </span>
-            <span>•</span>
-            <span><?= $config['languages'][$current_lang]['flag'] ?> <?= $config['languages'][$current_lang]['name'] ?></span>
-        </div>
-        <div class="save-bar-actions">
-            <a href="pages.php?lang=<?= $current_lang ?>" class="btn btn-secondary">Cancel</a>
-            <button type="submit" class="btn btn-primary">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                    <polyline points="17 21 17 13 7 13 7 21"/>
-                    <polyline points="7 3 7 8 15 8"/>
-                </svg>
-                <?= $is_new ? 'Create Page' : 'Save Changes' ?>
-            </button>
-        </div>
-    </div>
 </form>
 
-<script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
+<?php 
+// Include shortcode modals
+$media_hint = 'pages/' . $page_slug;
+require __DIR__ . '/../includes/editor-modals.php';
+
+// Include shared editor scripts
+$media_path = 'pages/' . $page_slug;
+require __DIR__ . '/../includes/editor-scripts.php';
+?>
+
 <script>
-// Initialize EasyMDE
-const easyMDE = new EasyMDE({
-    element: document.getElementById('editor'),
-    spellChecker: false,
-    autosave: {
-        enabled: <?= $is_new ? 'false' : 'true' ?>,
-        uniqueId: 'page-<?= $page_slug ?: 'new' ?>-<?= $current_lang ?>',
-        delay: 5000,
-    },
-    toolbar: [
-        'bold', 'italic', 'heading', '|',
-        'quote', 'unordered-list', 'ordered-list', '|',
-        'link', 'image', '|',
-        'preview', 'side-by-side', 'fullscreen', '|',
-        'guide'
-    ],
-    status: ['lines', 'words'],
-    minHeight: '400px',
+// Description character counter
+document.getElementById('descInput').addEventListener('input', function() {
+    document.getElementById('descCount').textContent = this.value.length;
 });
 
 // Generate slug from title
@@ -647,38 +839,19 @@ function generateSlug(text) {
         .replace(/^-+|-+$/g, '');
 }
 
-// Update slug when title changes (only for new pages or empty slug)
+// Update slug when title changes (only for new pages)
 function updateSlugFromTitle() {
     const titleInput = document.getElementById('titleInput');
     const slugInput = document.getElementById('slugInput');
     
     <?php if ($is_new): ?>
-    // For new pages, always update slug from title
     slugInput.value = generateSlug(titleInput.value);
-    <?php else: ?>
-    // For existing pages, only update if slug is empty
-    if (!slugInput.value) {
-        slugInput.value = generateSlug(titleInput.value);
-    }
     <?php endif; ?>
 }
 
 // Validate slug on input
 document.getElementById('slugInput').addEventListener('input', function() {
     this.value = this.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
-});
-
-// Description character counter
-document.querySelector('textarea[name="description"]').addEventListener('input', function() {
-    document.getElementById('descCount').textContent = this.value.length;
-});
-
-// Auto-hide toast messages
-document.querySelectorAll('.toast-message').forEach(toast => {
-    setTimeout(() => {
-        toast.style.animation = 'toastIn 0.3s ease reverse';
-        setTimeout(() => toast.remove(), 300);
-    }, 4000);
 });
 
 // Ctrl+S to save
@@ -691,4 +864,3 @@ document.addEventListener('keydown', function(e) {
 </script>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>
-

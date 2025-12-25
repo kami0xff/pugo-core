@@ -57,6 +57,8 @@ if (!isset($page_map[$page])) {
     // Try direct file access for backward compatibility
     $direct_file = PUGO_CORE_ROOT . '/pages/' . $page . '.php';
     if (file_exists($direct_file)) {
+        // Set the current page name for sidebar highlighting
+        $GLOBALS['pugo_current_page'] = $page;
         require $direct_file;
         exit;
     }
@@ -74,6 +76,9 @@ if (!file_exists($page_file)) {
     echo "Page file missing: " . htmlspecialchars($page_map[$page]);
     exit;
 }
+
+// Set the current page name for sidebar highlighting (used in header.php)
+$GLOBALS['pugo_current_page'] = basename($page_map[$page], '.php');
 
 require $page_file;
 
