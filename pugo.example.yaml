@@ -1,64 +1,196 @@
 # =============================================================================
-# Pugo Configuration Example
+# PUGO CONFIGURATION
 # =============================================================================
-# Copy this to your project root as pugo.yaml and customize
+# This is the ONLY configuration file you need to edit!
+# Copy this to your project root as pugo.yaml and customize.
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# SITE SETTINGS
+# -----------------------------------------------------------------------------
 site:
-  name: "My Hugo Site"
-  url: "https://example.com"
+  name: "My Awesome Site"
+  url: "https://mysite.com"
 
-# Languages
+# -----------------------------------------------------------------------------
+# AUTHENTICATION
+# -----------------------------------------------------------------------------
+# Generate password hash: php -r "echo password_hash('yourpassword', PASSWORD_DEFAULT);"
+auth:
+  username: admin
+  password_hash: "$2y$10$REPLACE_WITH_YOUR_HASH"
+  session_lifetime: 86400  # 24 hours in seconds
+
+# -----------------------------------------------------------------------------
+# LANGUAGES
+# -----------------------------------------------------------------------------
+# Define all languages your site supports.
+# The language with 'default: true' will be the primary language.
 languages:
   en:
     name: English
     flag: "🇬🇧"
     default: true
-  fr:
-    name: Français
-    flag: "🇫🇷"
+  
+  # Add more languages as needed:
+  # es:
+  #   name: Español
+  #   flag: "🇪🇸"
+  # de:
+  #   name: Deutsch
+  #   flag: "🇩🇪"
+  # fr:
+  #   name: Français
+  #   flag: "🇫🇷"
 
-# Content sections (auto-discovered from content/ folder if not specified)
+# -----------------------------------------------------------------------------
+# CONTENT SECTIONS
+# -----------------------------------------------------------------------------
+# Define your content sections (blog, reviews, tutorials, etc.)
+# Each section can have custom fields that appear in the editor.
 sections:
-  posts:
+  blog:
     name: Blog Posts
-    path: content/posts
     icon: "📝"
-  pages:
-    name: Pages
-    path: content
-    icon: "📄"
-
-# Data types (for YAML data file editing)
-data_types:
-  faqs:
-    name: FAQs
-    file: data/faqs.yaml
-    editor: SimpleListEditor
+    color: "#e11d48"
     fields:
-      - { name: question, type: text, label: Question, required: true }
-      - { name: answer, type: textarea, label: Answer, required: true }
+      - { name: title, type: text, label: Title, required: true }
+      - { name: description, type: textarea, label: Description }
+      - { name: date, type: date, label: Publish Date }
+      - { name: draft, type: checkbox, label: Draft }
+      - { name: tags, type: tags, label: Tags }
+      - { name: featured_image, type: image, label: Featured Image }
 
+  # Example: Reviews section with rating
+  # reviews:
+  #   name: Reviews
+  #   icon: "⭐"
+  #   color: "#f59e0b"
+  #   fields:
+  #     - { name: title, type: text, label: Title, required: true }
+  #     - { name: rating, type: number, label: Rating, min: 1, max: 5 }
+  #     - { name: pros, type: list, label: Pros }
+  #     - { name: cons, type: list, label: Cons }
+  #     - { name: verdict, type: textarea, label: Verdict }
+  
+  # Example: Tutorials section
+  # tutorials:
+  #   name: Tutorials
+  #   icon: "📚"
+  #   color: "#10b981"
+  #   fields:
+  #     - { name: title, type: text, label: Title, required: true }
+  #     - { name: difficulty, type: select, label: Difficulty, options: [beginner, intermediate, advanced] }
+  #     - { name: duration, type: text, label: Duration, placeholder: "30 min" }
+  #     - { name: prerequisites, type: list, label: Prerequisites }
+
+# -----------------------------------------------------------------------------
+# CONTENT TYPES (Optional - for advanced customization)
+# -----------------------------------------------------------------------------
+# Define reusable content type templates that sections can inherit from.
+# content_types:
+#   article:
+#     icon: "📄"
+#     color: "#3b82f6"
+#     fields:
+#       - { name: title, type: text, required: true }
+#       - { name: date, type: date }
+#       - { name: draft, type: checkbox }
+
+# -----------------------------------------------------------------------------
+# DATA FILES
+# -----------------------------------------------------------------------------
+# Define editable data files (YAML/JSON) that appear in the Data Files editor.
+data:
   menu:
     name: Navigation Menu
     file: data/menu.yaml
-    editor: SimpleListEditor
     fields:
       - { name: title, type: text, label: Title }
       - { name: url, type: text, label: URL }
-      - { name: weight, type: number, label: Order }
+      - { name: weight, type: number, label: Sort Order }
 
-# Authentication
-auth:
-  username: admin
-  # Generate with: php -r "echo password_hash('yourpassword', PASSWORD_DEFAULT);"
-  password_hash: "$2y$10$..."
+  # Example: Team members
+  # team:
+  #   name: Team Members
+  #   file: data/team.yaml
+  #   fields:
+  #     - { name: name, type: text, label: Name, required: true }
+  #     - { name: role, type: text, label: Role }
+  #     - { name: bio, type: textarea, label: Bio }
+  #     - { name: photo, type: image, label: Photo }
 
-# Git deployment
-git:
-  enabled: true
-  auto_commit: false
+  # Example: FAQs
+  # faqs:
+  #   name: FAQs
+  #   file: data/faqs.yaml
+  #   fields:
+  #     - { name: question, type: text, label: Question, required: true }
+  #     - { name: answer, type: textarea, label: Answer, required: true }
 
-# Hugo build command
+# -----------------------------------------------------------------------------
+# MEDIA SETTINGS
+# -----------------------------------------------------------------------------
+media:
+  allowed_images:
+    - jpg
+    - jpeg
+    - png
+    - gif
+    - webp
+    - svg
+  allowed_videos:
+    - mp4
+    - webm
+  max_upload_size: 10485760  # 10MB in bytes
+
+# -----------------------------------------------------------------------------
+# HUGO BUILD
+# -----------------------------------------------------------------------------
 hugo:
   command: "hugo --minify"
+  # For drafts in development:
+  # command: "hugo --minify --buildDrafts"
+
+# -----------------------------------------------------------------------------
+# DEPLOYMENT
+# -----------------------------------------------------------------------------
+# Configure Git deployment for pushing built files to production.
+deploy:
+  enabled: false
+  # SSH key path (relative to .deploy folder)
+  # ssh_key: github_deploy_key
+  # Remote repository
+  # remote: "git@github.com:username/mysite.git"
+  # auto_commit: false
+
+# -----------------------------------------------------------------------------
+# FIELD TYPES REFERENCE
+# -----------------------------------------------------------------------------
+# Available field types for sections and data:
+#
+# text       - Single line text input
+# textarea   - Multi-line text input
+# number     - Numeric input (supports min, max)
+# date       - Date picker
+# datetime   - Date and time picker
+# checkbox   - Boolean toggle
+# select     - Dropdown (requires 'options' array)
+# tags       - Tag input with autocomplete
+# list       - Repeatable text items
+# image      - Image picker with upload
+# image_list - Multiple images
+# color      - Color picker
+# url        - URL input with validation
+# range      - Slider (requires min, max)
+#
+# Field options:
+#   required: true/false
+#   label: "Display Label"
+#   placeholder: "Placeholder text"
+#   help: "Help text shown below field"
+#   default: "Default value"
+#   min: 0 (for number/range)
+#   max: 100 (for number/range)
+#   options: [opt1, opt2, opt3] (for select)
+#   rows: 5 (for textarea)

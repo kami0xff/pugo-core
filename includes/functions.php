@@ -153,12 +153,60 @@ function get_articles($lang = 'en', $section = null) {
 }
 
 /**
+ * Discover sections from content directory or config
+ * Provides a fallback if not defined elsewhere
+ */
+if (!function_exists('discover_sections')) {
+    function discover_sections() {
+        global $config;
+        
+        // First check if sections are defined in config (from pugo.yaml)
+        if (!empty($config['sections'])) {
+            $sections = [];
+            foreach ($config['sections'] as $key => $section) {
+                $sections[$key] = [
+                    'name' => $section['name'] ?? ucfirst($key),
+                    'color' => $section['color'] ?? '#6b7280',
+                    'icon' => $section['icon'] ?? 'file-text',
+                    'path' => CONTENT_DIR . '/' . $key,
+                ];
+            }
+            return $sections;
+        }
+        
+        // Fallback: discover from filesystem
+        $sections = [];
+        $section_colors = [
+            'blog' => '#e11d48', 'pages' => '#3b82f6', 'tutorials' => '#10b981',
+            'reviews' => '#f59e0b', 'docs' => '#0ea5e9', 'news' => '#8b5cf6',
+            'interviews' => '#ec4899',
+        ];
+        
+        if (defined('CONTENT_DIR') && is_dir(CONTENT_DIR)) {
+            foreach (scandir(CONTENT_DIR) as $item) {
+                if ($item[0] === '.') continue;
+                $path = CONTENT_DIR . '/' . $item;
+                if (is_dir($path)) {
+                    $name = ucfirst(str_replace('-', ' ', $item));
+                    $sections[$item] = [
+                        'name' => $name,
+                        'color' => $section_colors[$item] ?? '#6b7280',
+                        'path' => $path
+                    ];
+                }
+            }
+        }
+        return $sections;
+    }
+}
+
+/**
  * Get content sections with article counts (uses dynamic sections)
  */
 function get_sections_with_counts($lang = 'en') {
     global $config;
     
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$lang]['content_dir'];
+    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . ($config['languages'][$lang]['content_dir'] ?? 'content');
     $discovered_sections = discover_sections();
     $sections = [];
     
@@ -535,6 +583,14 @@ function get_translation_status($translation_key, $source_lang = 'en') {
 }
 
 /**
+ * Fix Hugo directory permissions (no-op in dev, may be needed in prod)
+ */
+function fix_hugo_permissions() {
+    // In dev containers running as root, this is not needed
+    // In production, configure proper ownership during deployment
+}
+
+/**
  * Build Hugo site
  */
 function build_hugo() {
@@ -542,6 +598,9 @@ function build_hugo() {
     
     $output = [];
     $return_code = 0;
+    
+    // Fix permissions before building (handles new folders created from host)
+    fix_hugo_permissions();
     
     // Get hugo command from config, with fallback
     $hugo_command = $config['hugo_command'] ?? ('cd ' . HUGO_ROOT . ' && hugo --minify');

@@ -15,3 +15,9 @@ Thumbs.db
 *.zip
 dist/
 
+# =============================================================================
+# Test Site - Local development environment (NOT committed to repo)
+# =============================================================================
+test-site/
+
+.deploy/
