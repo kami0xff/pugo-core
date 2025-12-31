@@ -1,81 +1,100 @@
 <?php
 /**
- * DashboardController - Admin dashboard/homepage
- * 
- * Shows overview statistics and recent activity.
- * Uses Actions directly for simple data fetching.
+ * DashboardController - Main dashboard/overview page
  */
 
 namespace Pugo\Controllers;
-
-use Pugo\Actions\Content\ListContentAction;
 
 class DashboardController extends BaseController
 {
     public function __construct()
     {
         parent::__construct();
+        
+        // Load required includes
         require_once dirname(__DIR__) . '/includes/functions.php';
         require_once dirname(__DIR__) . '/includes/content-types.php';
     }
 
     /**
-     * Dashboard index - show overview
+     * Dashboard index - show overview stats
      */
     public function index(): void
     {
         $this->requireAuth();
 
-        // Get sections with content counts
-        $sections = get_sections_with_counts($this->currentLang);
+        // Get sections with content types
+        $sections = get_sections_with_types($this->currentLang);
+        $totalArticles = array_sum(array_column($sections, 'count'));
+
+        // Get recent articles
+        $recentArticles = get_articles($this->currentLang);
         
-        // Get recent content using Action directly (simple operation)
-        $contentDir = $this->getContentDir();
-        $listAction = new ListContentAction($contentDir);
-        $result = $listAction->handle();
+        // Add content type to recent articles
+        foreach ($recentArticles as &$article) {
+            $article['content_type'] = detect_content_type($article['section'], $article['frontmatter']);
+            $article['type_info'] = get_content_type($article['content_type']);
+        }
+        unset($article);
         
-        $allContent = $result->success ? $result->data['items'] : [];
-        $totalContent = count($allContent);
-        
-        // Get recent items (last 5)
-        $recentContent = array_slice($allContent, 0, 5);
-        
-        // Count drafts
-        $draftCount = count(array_filter($allContent, fn($item) => $item['draft'] ?? false));
-        
-        // Get content type distribution
-        $contentTypes = [];
-        foreach ($allContent as $item) {
-            $type = detect_content_type($item['section'], $item['frontmatter']);
-            if (!isset($contentTypes[$type])) {
-                $contentTypes[$type] = ['info' => get_content_type($type), 'count' => 0];
-            }
-            $contentTypes[$type]['count']++;
+        $recentArticles = array_slice($recentArticles, 0, 10);
+
+        // Get content stats by type
+        $contentByType = get_content_stats_by_type($this->currentLang);
+
+        // Count translations per language
+        $translationStats = [];
+        foreach ($this->config['languages'] as $lang => $langConfig) {
+            $contentDir = get_content_dir_for_lang($lang);
+            $translationStats[$lang] = is_dir($contentDir) ? count(get_articles($lang)) : 0;
         }
 
-        // Calculate stats per language
-        $languageStats = [];
-        foreach ($this->config['languages'] as $lang => $langConfig) {
-            $langDir = pugo_get_content_dir_for_lang($lang);
-            $langAction = new ListContentAction($langDir);
-            $langResult = $langAction->handle();
-            $languageStats[$lang] = [
-                'name' => $langConfig['name'],
-                'flag' => $langConfig['flag'],
-                'count' => $langResult->success ? $langResult->data['count'] : 0
-            ];
-        }
+        // Get standalone pages count
+        $pagesCount = $this->countStandalonePages();
 
         $this->render('dashboard/index', [
             'pageTitle' => 'Dashboard',
             'sections' => $sections,
-            'totalContent' => $totalContent,
-            'draftCount' => $draftCount,
-            'recentContent' => $recentContent,
-            'contentTypes' => $contentTypes,
-            'languageStats' => $languageStats,
-            'sectionCount' => count($sections),
+            'totalArticles' => $totalArticles,
+            'pagesCount' => $pagesCount,
+            'contentByType' => $contentByType,
+            'translationStats' => $translationStats,
+            'recentArticles' => $recentArticles,
         ]);
     }
-}
 
+    /**
+     * Count standalone pages (pages with _index.md but no child articles)
+     */
+    private function countStandalonePages(): int
+    {
+        $pagesCount = 0;
+        $contentDir = $this->getContentDir();
+
+        if (!is_dir($contentDir)) {
+            return 0;
+        }
+
+        foreach (scandir($contentDir) as $item) {
+            if ($item[0] === '.' || !is_dir($contentDir . '/' . $item)) {
+                continue;
+            }
+
+            if (file_exists($contentDir . '/' . $item . '/_index.md')) {
+                // Check if it's not a section (no child .md files other than _index.md)
+                $hasChildren = false;
+                foreach (scandir($contentDir . '/' . $item) as $child) {
+                    if ($child !== '_index.md' && pathinfo($child, PATHINFO_EXTENSION) === 'md') {
+                        $hasChildren = true;
+                        break;
+                    }
+                }
+                if (!$hasChildren) {
+                    $pagesCount++;
+                }
+            }
+        }
+
+        return $pagesCount;
+    }
+}

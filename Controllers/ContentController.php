@@ -73,6 +73,9 @@ class ContentController extends BaseController
         
         // Get active content types for summary cards
         $activeTypes = $this->contentService->getActiveContentTypes();
+        
+        // Get all articles for total count
+        $allArticles = get_articles($this->currentLang);
 
         // Build page title
         if ($currentType && isset($activeTypes[$currentType])) {
@@ -86,6 +89,7 @@ class ContentController extends BaseController
         $this->render('content/index', [
             'pageTitle' => $pageTitle,
             'articles' => $articles,
+            'allArticles' => $allArticles,
             'sections' => $sections,
             'activeTypes' => $activeTypes,
             'currentSection' => $currentSection,

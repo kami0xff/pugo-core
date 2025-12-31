@@ -40,12 +40,14 @@ if (!defined('HUGO_ADMIN')) {
  */
 $controller_routes = [
     // === Dashboard ===
-    // 'dashboard'     => ['DashboardController', 'index'],
+    ''              => ['DashboardController', 'index'],
+    'index'         => ['DashboardController', 'index'],
+    'dashboard'     => ['DashboardController', 'index'],
     
     // === Content Management ===
-    // 'content'       => ['ContentController', 'index'],
-    // 'content/edit'  => ['ContentController', 'edit'],
-    // 'content/new'   => ['ContentController', 'create'],
+    'articles'      => ['ContentController', 'index'],
+    // 'edit'          => ['ContentController', 'edit'],
+    // 'new'           => ['ContentController', 'create'],
     // 'content/delete'=> ['ContentController', 'delete'],
     
     // === Media Library ===
@@ -126,11 +128,30 @@ if (isset($controller_routes[$page])) {
     require_once PUGO_CORE_ROOT . '/Controllers/BaseController.php';
     require_once PUGO_CORE_ROOT . "/Controllers/{$controllerName}.php";
     
+    // Load Services if needed
+    $servicesDir = PUGO_CORE_ROOT . '/Services';
+    if (is_dir($servicesDir)) {
+        foreach (glob($servicesDir . '/*.php') as $serviceFile) {
+            require_once $serviceFile;
+        }
+    }
+    
     // Load config
     $config = require PUGO_ADMIN_ROOT . '/config.php';
     
-    // Set current page for sidebar
-    $GLOBALS['pugo_current_page'] = explode('/', $page)[0];
+    // Set current page for sidebar (handle empty string for index)
+    $GLOBALS['pugo_current_page'] = $page ?: 'index';
+    
+    // Map page names for sidebar highlighting
+    $sidebarMap = [
+        'articles' => 'articles',
+        'dashboard' => 'index',
+        '' => 'index',
+        'index' => 'index',
+    ];
+    if (isset($sidebarMap[$page])) {
+        $GLOBALS['pugo_current_page'] = $sidebarMap[$page];
+    }
     
     // Instantiate and call method
     $controller = new $controllerClass();
