@@ -2,60 +2,64 @@
 /**
  * ContentController - Handles all content CRUD operations
  * 
+ * Architecture:
+ * - Uses Actions directly for simple operations
+ * - Uses ContentService for complex orchestrations (multiple actions + side effects)
+ * 
  * Pugo supports multiple content types (articles, reviews, tutorials, etc.)
  * This controller handles them all generically.
- * 
- * Responsible for:
- * - Listing content
- * - Editing content
- * - Creating new content
- * - Deleting content
  */
 
 namespace Pugo\Controllers;
 
+use Pugo\Actions\ActionResult;
+use Pugo\Actions\Content\GetContentAction;
+use Pugo\Actions\Content\ListContentAction;
+use Pugo\Actions\Content\UpdateContentAction;
+use Pugo\Actions\Content\CreateContentAction;
+use Pugo\Actions\Content\DeleteContentAction;
+use Pugo\Services\ContentService;
+
 class ContentController extends BaseController
 {
+    private ContentService $contentService;
+
     public function __construct()
     {
         parent::__construct();
         
-        // Load required includes
+        // Load required includes for helper functions
         require_once dirname(__DIR__) . '/includes/functions.php';
         require_once dirname(__DIR__) . '/includes/content-types.php';
         require_once dirname(__DIR__) . '/includes/dynamic-fields.php';
+        
+        // Initialize service for complex operations
+        $this->contentService = new ContentService(
+            $this->getContentDir(),
+            HUGO_ROOT,
+            $this->config
+        );
     }
-    
+
     /**
      * List all content
+     * 
+     * Uses: ListContentAction directly + helper functions for metadata
      */
     public function index(): void
     {
         $this->requireAuth();
-        
+
         $currentSection = $this->get('section');
         $currentType = $this->get('type');
         $search = $this->get('search', '');
+
+        // Use service to get content with type detection
+        $result = $this->contentService->listContentWithTypes($currentSection, $currentType);
         
-        // Get sections with content type info
-        $sections = get_sections_with_types($this->currentLang);
-        
-        // Get articles
-        $articles = get_articles($this->currentLang, $currentSection);
-        
-        // Add content type info to each article
-        foreach ($articles as &$article) {
-            $article['content_type'] = detect_content_type($article['section'], $article['frontmatter']);
-            $article['type_info'] = get_content_type($article['content_type']);
-        }
-        unset($article);
-        
-        // Filter by content type if specified
-        if ($currentType) {
-            $articles = array_filter($articles, fn($a) => $a['content_type'] === $currentType);
-        }
-        
-        // Filter by search
+        $articles = $result->success ? $result->data['items'] : [];
+
+        // Apply search filter (simple logic stays in controller)
         if ($search) {
             $articles = array_filter($articles, function($article) use ($search) {
                 $title = $article['frontmatter']['title'] ?? '';
@@ -63,18 +67,13 @@ class ContentController extends BaseController
                 return stripos($title, $search) !== false || stripos($desc, $search) !== false;
             });
         }
+
+        // Get sections for sidebar/filter
+        $sections = get_sections_with_types($this->currentLang);
         
-        // Get content types that have items
-        $activeTypes = [];
-        $allArticles = get_articles($this->currentLang);
-        foreach ($allArticles as $art) {
-            $type = detect_content_type($art['section'], $art['frontmatter']);
-            if (!isset($activeTypes[$type])) {
-                $activeTypes[$type] = ['info' => get_content_type($type), 'count' => 0];
-            }
-            $activeTypes[$type]['count']++;
-        }
-        
+        // Get active content types for summary cards
+        $activeTypes = $this->contentService->getActiveContentTypes();
+
         // Build page title
         if ($currentType && isset($activeTypes[$currentType])) {
             $pageTitle = $activeTypes[$currentType]['info']['plural'];
@@ -83,7 +82,7 @@ class ContentController extends BaseController
         } else {
             $pageTitle = 'All Content';
         }
-        
+
         $this->render('content/index', [
             'pageTitle' => $pageTitle,
             'articles' => $articles,
@@ -94,73 +93,59 @@ class ContentController extends BaseController
             'search' => $search,
         ]);
     }
-    
+
     /**
      * Edit existing content
+     * 
+     * GET: Uses GetContentAction to load content
+     * POST: Uses ContentService.updateAndRebuild() for save + build
      */
     public function edit(): void
     {
         $this->requireAuth();
-        
+
         $file = $this->get('file', '');
-        
         if (!$file) {
             $this->redirect('articles.php');
         }
-        
-        // Build file path
-        $contentDir = $this->getContentDir();
-        $filePath = $contentDir . '/' . $file;
-        
-        if (!file_exists($filePath)) {
-            $this->flash('error', 'Content not found');
+
+        // Handle form submission first
+        if ($this->isPost()) {
+            $this->handleUpdate($file);
+            return;
+        }
+
+        // GET: Load content using service (includes metadata)
+        $result = $this->contentService->getContentWithMetadata($file);
+
+        if (!$result->success) {
+            $this->flash('error', $result->error);
             $this->redirect('articles.php?lang=' . $this->currentLang);
         }
-        
-        // Parse the file
-        $fileContent = file_get_contents($filePath);
-        $parsed = parse_frontmatter($fileContent);
-        $frontmatter = $parsed['frontmatter'];
-        $body = $parsed['body'];
-        
-        // Detect content type
-        $pathParts = explode('/', $file);
-        $section = $pathParts[0] ?? '';
-        $category = count($pathParts) > 2 ? $pathParts[1] : null;
-        $isIndex = (basename($file) === '_index.md');
-        $contentType = detect_content_type($section, $frontmatter, $isIndex);
-        $contentTypeInfo = get_content_type($contentType);
-        
-        // Handle form submission
-        if ($this->isPost()) {
-            $this->handleEditSubmission($filePath, $contentType);
-        }
-        
-        // Get additional data for the view
+
+        $data = $result->data;
+
+        // Get additional view data
         $sections = get_sections_with_counts($this->currentLang);
-        $sectionColor = $sections[$section]['color'] ?? '#666';
-        $sectionName = $sections[$section]['name'] ?? ucfirst($section);
-        
-        $translationKey = $frontmatter['translationKey'] ?? null;
-        $translations = $translationKey ? get_translation_status($translationKey) : [];
-        
-        $templateInfo = detect_hugo_template($section, $frontmatter, $isIndex);
+        $sectionColor = $sections[$data['section']]['color'] ?? '#666';
+        $sectionName = $sections[$data['section']]['name'] ?? ucfirst($data['section']);
+        $templateInfo = detect_hugo_template($data['section'], $data['frontmatter'], $data['is_index']);
         $allContent = get_all_articles_for_selection($this->currentLang);
-        
+
         $this->render('content/edit', [
-            'pageTitle' => 'Edit: ' . ($frontmatter['title'] ?? basename($file, '.md')),
+            'pageTitle' => 'Edit: ' . ($data['frontmatter']['title'] ?? basename($file, '.md')),
             'file' => $file,
-            'filePath' => $filePath,
-            'frontmatter' => $frontmatter,
-            'body' => $body,
-            'section' => $section,
-            'category' => $category,
-            'isIndex' => $isIndex,
-            'contentType' => $contentType,
-            'contentTypeInfo' => $contentTypeInfo,
+            'filePath' => $data['path'],
+            'frontmatter' => $data['frontmatter'],
+            'body' => $data['body'],
+            'section' => $data['section'],
+            'category' => $data['category'],
+            'isIndex' => $data['is_index'],
+            'contentType' => $data['content_type'],
+            'contentTypeInfo' => $data['content_type_info'],
             'sectionColor' => $sectionColor,
             'sectionName' => $sectionName,
-            'translations' => $translations,
+            'translations' => $data['translations'] ?? [],
             'templateInfo' => $templateInfo,
             'allContent' => $allContent,
             'success' => $this->getFlash('success'),
@@ -168,161 +153,212 @@ class ContentController extends BaseController
             'warning' => $this->getFlash('warning'),
         ]);
     }
-    
+
     /**
-     * Handle edit form submission
+     * Handle content update (POST)
+     * 
+     * Uses: ContentService.updateAndRebuild() for atomic save + rebuild
      */
-    private function handleEditSubmission(string $filePath, string $contentType): void
+    private function handleUpdate(string $file): void
     {
         $this->validateCsrf();
-        
-        // Build new frontmatter
-        $newFrontmatter = [
+
+        // Build frontmatter from POST data
+        $frontmatter = $this->buildFrontmatterFromPost();
+
+        // Get content type for dynamic fields
+        $contentType = $this->post('content_type', 'article');
+        $dynamicFields = parse_content_type_form_data($contentType, $_POST);
+        $frontmatter = array_merge($frontmatter, $dynamicFields);
+
+        // Preserve content type if it has custom fields
+        $typeInfo = get_content_type($contentType);
+        if (!empty($typeInfo['fields']) && $contentType !== 'article' && $contentType !== 'page') {
+            $frontmatter['type'] = $contentType;
+        }
+
+        $body = $this->post('body', '');
+
+        // Use service for update + rebuild
+        $result = $this->contentService->updateAndRebuild($file, $frontmatter, $body);
+
+        if ($result->success) {
+            $this->flash('success', $result->message);
+            if (!$result->data['build']['success']) {
+                $this->flash('warning', 'Hugo rebuild had warnings');
+            }
+        } else {
+            $this->flash('error', $result->error);
+        }
+
+        $this->redirect('edit.php?file=' . urlencode($file) . '&lang=' . $this->currentLang);
+    }
+
+    /**
+     * Build frontmatter array from POST data
+     * Simple data mapping - stays in controller
+     */
+    private function buildFrontmatterFromPost(): array
+    {
+        $frontmatter = [
             'title' => $this->post('title', ''),
             'description' => $this->post('description', ''),
             'author' => $this->post('author', 'XloveCam Team'),
             'date' => $this->post('date', date('Y-m-d')),
-            'lastmod' => date('Y-m-d'),
         ];
-        
+
         // Optional fields
         if ($image = $this->post('image')) {
-            $newFrontmatter['image'] = $image;
+            $frontmatter['image'] = $image;
         }
-        
+
         if ($keywords = $this->post('keywords')) {
             $decoded = json_decode($keywords, true);
-            if ($decoded) $newFrontmatter['keywords'] = $decoded;
+            if ($decoded) $frontmatter['keywords'] = $decoded;
         }
-        
+
         if ($tags = $this->post('tags')) {
             $decoded = json_decode($tags, true);
-            if ($decoded) $newFrontmatter['tags'] = $decoded;
+            if ($decoded) $frontmatter['tags'] = $decoded;
         }
-        
+
         if ($translationKey = $this->post('translationKey')) {
-            $newFrontmatter['translationKey'] = $translationKey;
+            $frontmatter['translationKey'] = $translationKey;
         }
-        
+
         if ($related = $this->post('related')) {
             $decoded = json_decode($related, true);
             if ($decoded && is_array($decoded) && count($decoded) > 0) {
-                $newFrontmatter['related'] = $decoded;
+                $frontmatter['related'] = $decoded;
             }
         }
-        
+
         if ($weight = $this->post('weight')) {
             if (is_numeric($weight)) {
-                $newFrontmatter['weight'] = (int)$weight;
+                $frontmatter['weight'] = (int)$weight;
             }
         }
-        
+
         if ($this->post('draft')) {
-            $newFrontmatter['draft'] = true;
+            $frontmatter['draft'] = true;
         }
-        
-        // Parse dynamic content type fields
-        $dynamicFields = parse_content_type_form_data($contentType, $_POST);
-        $newFrontmatter = array_merge($newFrontmatter, $dynamicFields);
-        
-        // Preserve content type if it has custom fields
-        $typeInfo = get_content_type($contentType);
-        if (!empty($typeInfo['fields']) && $contentType !== 'article' && $contentType !== 'page') {
-            $newFrontmatter['type'] = $contentType;
-        }
-        
-        $newBody = $this->post('body', '');
-        
-        if (save_article($filePath, $newFrontmatter, $newBody)) {
-            // Auto-rebuild Hugo
-            $buildResult = build_hugo();
-            if ($buildResult['success']) {
-                $this->flash('success', 'Content saved and site rebuilt successfully!');
-            } else {
-                $this->flash('success', 'Content saved successfully!');
-                $this->flash('warning', 'Hugo rebuild had warnings.');
-            }
-        } else {
-            $this->flash('error', 'Failed to save content');
-        }
-        
-        $this->redirect('edit.php?file=' . urlencode($this->get('file')) . '&lang=' . $this->currentLang);
+
+        return $frontmatter;
     }
-    
+
     /**
      * Create new content
+     * 
+     * GET: Show form
+     * POST: Uses ContentService.createAndRebuild()
      */
     public function create(): void
     {
         $this->requireAuth();
-        
-        // Get parameters for translation or new content
+
+        if ($this->isPost()) {
+            $this->handleCreate();
+            return;
+        }
+
+        // Handle prefill from translation source
+        $prefillData = [];
         $translateFrom = $this->get('translate_from');
         $sourceLang = $this->get('source_lang');
-        $targetLang = $this->get('target_lang');
-        $section = $this->get('section');
-        
-        $prefillData = [];
-        
+
         if ($translateFrom && $sourceLang) {
-            // Loading from existing content for translation
             $sourceDir = pugo_get_content_dir_for_lang($sourceLang);
-            $sourcePath = $sourceDir . '/' . $translateFrom;
-            
-            if (file_exists($sourcePath)) {
-                $fileContent = file_get_contents($sourcePath);
-                $parsed = parse_frontmatter($fileContent);
+            $action = new GetContentAction($sourceDir);
+            $result = $action->handle($translateFrom);
+
+            if ($result->success) {
                 $prefillData = [
-                    'frontmatter' => $parsed['frontmatter'],
-                    'body' => $parsed['body'],
+                    'frontmatter' => $result->data['frontmatter'],
+                    'body' => $result->data['body'],
                     'sourceFile' => $translateFrom,
                 ];
             }
         }
-        
+
         $sections = get_sections_with_types($this->currentLang);
-        
+
         $this->render('content/create', [
             'pageTitle' => 'New Content',
             'sections' => $sections,
-            'currentSection' => $section,
+            'currentSection' => $this->get('section'),
             'prefillData' => $prefillData,
-            'targetLang' => $targetLang,
+            'targetLang' => $this->get('target_lang'),
         ]);
     }
-    
+
+    /**
+     * Handle content creation (POST)
+     */
+    private function handleCreate(): void
+    {
+        $this->validateCsrf();
+
+        $section = $this->post('section', 'blog');
+        $slug = $this->post('slug', '');
+
+        if (!$slug) {
+            $slug = $this->slugify($this->post('title', 'untitled'));
+        }
+
+        $frontmatter = $this->buildFrontmatterFromPost();
+        $body = $this->post('body', '');
+
+        $result = $this->contentService->createAndRebuild($section, $slug, $frontmatter, $body);
+
+        if ($result->success) {
+            $this->flash('success', $result->message);
+            $this->redirect('edit.php?file=' . urlencode($result->data['relative_path']) . '&lang=' . $this->currentLang);
+        } else {
+            $this->flash('error', $result->error);
+            $this->redirect('new.php?section=' . urlencode($section) . '&lang=' . $this->currentLang);
+        }
+    }
+
     /**
      * Delete content
+     * 
+     * Uses: ContentService.deleteAndRebuild()
      */
     public function delete(): void
     {
         $this->requireAuth();
-        
+
         if (!$this->isPost()) {
             $this->redirect('articles.php');
         }
-        
+
         $this->validateCsrf();
-        
+
         $file = $this->post('file', '');
-        
         if (!$file) {
             $this->flash('error', 'No file specified');
             $this->redirect('articles.php?lang=' . $this->currentLang);
         }
-        
-        $contentDir = $this->getContentDir();
-        $filePath = $contentDir . '/' . $file;
-        
-        if (file_exists($filePath) && unlink($filePath)) {
+
+        $result = $this->contentService->deleteAndRebuild($file);
+
+        if ($result->success) {
             $this->flash('success', 'Content deleted successfully');
-            
-            // Rebuild site
-            build_hugo();
         } else {
-            $this->flash('error', 'Failed to delete content');
+            $this->flash('error', $result->error);
         }
-        
+
         $this->redirect('articles.php?lang=' . $this->currentLang);
+    }
+
+    /**
+     * Simple slugify helper - stays in controller as it's presentation-related
+     */
+    private function slugify(string $text): string
+    {
+        $text = strtolower(trim($text));
+        $text = preg_replace('/[^a-z0-9-]/', '-', $text);
+        $text = preg_replace('/-+/', '-', $text);
+        return trim($text, '-');
     }
 }

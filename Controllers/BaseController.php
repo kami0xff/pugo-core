@@ -16,22 +16,22 @@ abstract class BaseController
     protected array $config;
     protected string $currentLang;
     protected array $viewData = [];
-    
+
     public function __construct()
     {
         // Load config
         $this->config = require dirname(__DIR__, 2) . '/config.php';
-        
+
         // Set current language
         $this->currentLang = $_GET['lang'] ?? $this->config['default_language'] ?? 'en';
-        
+
         // Common view data
         $this->viewData = [
             'config' => $this->config,
             'currentLang' => $this->currentLang,
         ];
     }
-    
+
     /**
      * Require authentication before proceeding
      */
@@ -40,7 +40,7 @@ abstract class BaseController
         require_once dirname(__DIR__) . '/includes/auth.php';
         require_auth();
     }
-    
+
     /**
      * Render a view with data
      * 
@@ -51,22 +51,22 @@ abstract class BaseController
     {
         // Merge with common view data
         $data = array_merge($this->viewData, $data);
-        
+
         // Extract variables for the view
         extract($data);
-        
+
         // Build view path
         $viewPath = dirname(__DIR__) . '/Views/' . $view . '.php';
-        
+
         if (!file_exists($viewPath)) {
             throw new \RuntimeException("View not found: {$view}");
         }
-        
+
         // Include the layout which will include the view
         $contentView = $viewPath;
         require dirname(__DIR__) . '/Views/layouts/admin.php';
     }
-    
+
     /**
      * Render a view without layout (for partials/AJAX)
      */
@@ -74,11 +74,11 @@ abstract class BaseController
     {
         $data = array_merge($this->viewData, $data);
         extract($data);
-        
+
         $viewPath = dirname(__DIR__) . '/Views/' . $view . '.php';
         require $viewPath;
     }
-    
+
     /**
      * Return JSON response
      */
@@ -89,7 +89,7 @@ abstract class BaseController
         echo json_encode($data);
         exit;
     }
-    
+
     /**
      * Redirect to another URL
      */
@@ -98,7 +98,7 @@ abstract class BaseController
         header('Location: ' . $url);
         exit;
     }
-    
+
     /**
      * Set a flash message
      */
@@ -109,7 +109,7 @@ abstract class BaseController
         }
         $_SESSION[$type] = $message;
     }
-    
+
     /**
      * Get and clear a flash message
      */
@@ -122,7 +122,7 @@ abstract class BaseController
         unset($_SESSION[$type]);
         return $message;
     }
-    
+
     /**
      * Get POST data with optional default
      */
@@ -130,7 +130,7 @@ abstract class BaseController
     {
         return $_POST[$key] ?? $default;
     }
-    
+
     /**
      * Get GET data with optional default
      */
@@ -138,7 +138,7 @@ abstract class BaseController
     {
         return $_GET[$key] ?? $default;
     }
-    
+
     /**
      * Check if request is POST
      */
@@ -146,7 +146,7 @@ abstract class BaseController
     {
         return $_SERVER['REQUEST_METHOD'] === 'POST';
     }
-    
+
     /**
      * Validate CSRF token
      */
@@ -154,7 +154,7 @@ abstract class BaseController
     {
         csrf_check();
     }
-    
+
     /**
      * Get content directory for current language
      */

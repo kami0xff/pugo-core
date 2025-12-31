@@ -32,13 +32,46 @@ if (!defined('HUGO_ADMIN')) {
  * 
  * Enable these routes gradually as you migrate pages to controllers.
  * Uncomment a route to use the controller instead of legacy page file.
+ * 
+ * Architecture:
+ * - Controllers: Handle HTTP, delegate to Actions/Services
+ * - Actions: Single-purpose business operations (already exist in Actions/)
+ * - Services: Orchestrate multiple Actions for complex workflows (Services/)
  */
 $controller_routes = [
-    // Example: Uncomment to use ContentController for articles listing
-    // 'content'    => ['ContentController', 'index'],
-    // 'content/edit' => ['ContentController', 'edit'],
-    // 'content/new'  => ['ContentController', 'create'],
-    // 'content/delete' => ['ContentController', 'delete'],
+    // === Dashboard ===
+    // 'dashboard'     => ['DashboardController', 'index'],
+    
+    // === Content Management ===
+    // 'content'       => ['ContentController', 'index'],
+    // 'content/edit'  => ['ContentController', 'edit'],
+    // 'content/new'   => ['ContentController', 'create'],
+    // 'content/delete'=> ['ContentController', 'delete'],
+    
+    // === Media Library ===
+    // 'media'         => ['MediaController', 'index'],
+    // 'media/upload'  => ['MediaController', 'upload'],
+    // 'media/delete'  => ['MediaController', 'delete'],
+    // 'media/folder'  => ['MediaController', 'createFolder'],
+    
+    // === Taxonomy (Tags/Categories) ===
+    // 'taxonomy'      => ['TaxonomyController', 'index'],
+    // 'taxonomy/rename' => ['TaxonomyController', 'rename'],
+    // 'taxonomy/merge'  => ['TaxonomyController', 'merge'],
+    // 'taxonomy/delete' => ['TaxonomyController', 'delete'],
+    
+    // === Data Files ===
+    // 'data'          => ['DataController', 'index'],
+    // 'data/edit'     => ['DataController', 'edit'],
+    // 'data/create'   => ['DataController', 'create'],
+    // 'data/delete'   => ['DataController', 'delete'],
+    
+    // === Authentication ===
+    // 'login'         => ['AuthController', 'login'],
+    // 'logout'        => ['AuthController', 'logout'],
+    
+    // === API ===
+    // 'api'           => ['ApiController', 'handle'],
 ];
 
 /**
