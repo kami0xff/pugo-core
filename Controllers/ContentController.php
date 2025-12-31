@@ -119,37 +119,63 @@ class ContentController extends BaseController
             return;
         }
 
-        // GET: Load content using service (includes metadata)
-        $result = $this->contentService->getContentWithMetadata($file);
+        // Construct full path
+        $contentDir = $this->getContentDir();
+        $filePath = $contentDir . '/' . $file;
 
-        if (!$result->success) {
-            $this->flash('error', $result->error);
+        // Check if file exists
+        if (!file_exists($filePath)) {
+            $this->flash('error', 'Article not found');
             $this->redirect('articles.php?lang=' . $this->currentLang);
         }
 
-        $data = $result->data;
+        // Parse the file
+        $content = file_get_contents($filePath);
+        $parsed = parse_frontmatter($content);
+        $frontmatter = $parsed['frontmatter'];
+        $body = $parsed['body'];
 
-        // Get additional view data
-        $sections = get_sections_with_counts($this->currentLang);
-        $sectionColor = $sections[$data['section']]['color'] ?? '#666';
-        $sectionName = $sections[$data['section']]['name'] ?? ucfirst($data['section']);
-        $templateInfo = detect_hugo_template($data['section'], $data['frontmatter'], $data['is_index']);
+        // Parse path for section info
+        $pathParts = explode('/', $file);
+        $section = $pathParts[0] ?? '';
+        $category = count($pathParts) > 2 ? $pathParts[1] : null;
+
+        // Detect content type
+        $isIndex = (basename($file) === '_index.md');
+        $contentType = detect_content_type($section, $frontmatter, $isIndex);
+        $contentTypeInfo = get_content_type($contentType);
+
+        // Get section info
+        $sectionsList = get_sections_with_counts($this->currentLang);
+        $sectionColor = $sectionsList[$section]['color'] ?? '#666';
+        $sectionName = $sectionsList[$section]['name'] ?? ucfirst($section);
+
+        // Get translation status
+        $translationKey = $frontmatter['translationKey'] ?? null;
+        $translations = $translationKey ? get_translation_status($translationKey) : [];
+
+        // Get template info
+        $templateInfo = detect_hugo_template($section, $frontmatter, $isIndex);
+        
+        // Get all articles for related selection
         $allContent = get_all_articles_for_selection($this->currentLang);
 
         $this->render('content/edit', [
-            'pageTitle' => 'Edit: ' . ($data['frontmatter']['title'] ?? basename($file, '.md')),
+            'pageTitle' => 'Edit: ' . ($frontmatter['title'] ?? basename($file, '.md')),
             'file' => $file,
-            'filePath' => $data['path'],
-            'frontmatter' => $data['frontmatter'],
-            'body' => $data['body'],
-            'section' => $data['section'],
-            'category' => $data['category'],
-            'isIndex' => $data['is_index'],
-            'contentType' => $data['content_type'],
-            'contentTypeInfo' => $data['content_type_info'],
+            'filePath' => $filePath,
+            'frontmatter' => $frontmatter,
+            'body' => $body,
+            'section' => $section,
+            'category' => $category,
+            'isIndex' => $isIndex,
+            'contentType' => $contentType,
+            'contentTypeInfo' => $contentTypeInfo,
             'sectionColor' => $sectionColor,
             'sectionName' => $sectionName,
-            'translations' => $data['translations'] ?? [],
+            'sectionsList' => $sectionsList,
+            'translations' => $translations,
+            'translationKey' => $translationKey,
             'templateInfo' => $templateInfo,
             'allContent' => $allContent,
             'success' => $this->getFlash('success'),
@@ -160,22 +186,69 @@ class ContentController extends BaseController
 
     /**
      * Handle content update (POST)
-     * 
-     * Uses: ContentService.updateAndRebuild() for atomic save + rebuild
      */
     private function handleUpdate(string $file): void
     {
         $this->validateCsrf();
 
-        // Build frontmatter from POST data
-        $frontmatter = $this->buildFrontmatterFromPost();
+        // Detect content type early (needed for dynamic fields)
+        $pathParts = explode('/', $file);
+        $section = $pathParts[0] ?? '';
+        $isIndex = (basename($file) === '_index.md');
+        
+        // Read current frontmatter to detect type
+        $filePath = $this->getContentDir() . '/' . $file;
+        if (file_exists($filePath)) {
+            $parsed = parse_frontmatter(file_get_contents($filePath));
+            $contentType = detect_content_type($section, $parsed['frontmatter'], $isIndex);
+        } else {
+            $contentType = 'article';
+        }
 
-        // Get content type for dynamic fields
-        $contentType = $this->post('content_type', 'article');
+        // Build new frontmatter
+        $frontmatter = [
+            'title' => $this->post('title', ''),
+            'description' => $this->post('description', ''),
+            'author' => $this->post('author', 'XloveCam Team'),
+            'date' => $this->post('date', date('Y-m-d')),
+            'lastmod' => date('Y-m-d'),
+        ];
+
+        // Optional fields
+        if ($image = $this->post('image')) {
+            $frontmatter['image'] = $image;
+        }
+        if ($keywords = $this->post('keywords')) {
+            $decoded = json_decode($keywords, true);
+            if ($decoded) $frontmatter['keywords'] = $decoded;
+        }
+        if ($tags = $this->post('tags')) {
+            $decoded = json_decode($tags, true);
+            if ($decoded) $frontmatter['tags'] = $decoded;
+        }
+        if ($translationKey = $this->post('translationKey')) {
+            $frontmatter['translationKey'] = $translationKey;
+        }
+        if ($related = $this->post('related')) {
+            $decoded = json_decode($related, true);
+            if ($decoded && is_array($decoded) && count($decoded) > 0) {
+                $frontmatter['related'] = $decoded;
+            }
+        }
+        if ($weight = $this->post('weight')) {
+            if (is_numeric($weight)) {
+                $frontmatter['weight'] = (int)$weight;
+            }
+        }
+        if ($this->post('draft')) {
+            $frontmatter['draft'] = true;
+        }
+
+        // Parse dynamic content type fields
         $dynamicFields = parse_content_type_form_data($contentType, $_POST);
         $frontmatter = array_merge($frontmatter, $dynamicFields);
 
-        // Preserve content type if it has custom fields
+        // Preserve content type in frontmatter if it has custom fields
         $typeInfo = get_content_type($contentType);
         if (!empty($typeInfo['fields']) && $contentType !== 'article' && $contentType !== 'page') {
             $frontmatter['type'] = $contentType;
@@ -183,16 +256,18 @@ class ContentController extends BaseController
 
         $body = $this->post('body', '');
 
-        // Use service for update + rebuild
-        $result = $this->contentService->updateAndRebuild($file, $frontmatter, $body);
-
-        if ($result->success) {
-            $this->flash('success', $result->message);
-            if (!$result->data['build']['success']) {
-                $this->flash('warning', 'Hugo rebuild had warnings');
+        // Save the article
+        if (save_article($filePath, $frontmatter, $body)) {
+            // Auto-rebuild Hugo
+            $buildResult = build_hugo();
+            if ($buildResult['success']) {
+                $this->flash('success', 'Article saved and site rebuilt successfully!');
+            } else {
+                $this->flash('success', 'Article saved successfully!');
+                $this->flash('warning', 'Hugo rebuild had warnings.');
             }
         } else {
-            $this->flash('error', $result->error);
+            $this->flash('error', 'Failed to save article');
         }
 
         $this->redirect('edit.php?file=' . urlencode($file) . '&lang=' . $this->currentLang);
@@ -254,44 +329,54 @@ class ContentController extends BaseController
      * Create new content
      * 
      * GET: Show form
-     * POST: Uses ContentService.createAndRebuild()
+     * POST: Save new content
      */
     public function create(): void
     {
         $this->requireAuth();
 
+        $pageTitle = 'New Article';
+        $currentSection = $this->get('section', '');
+
+        // Translation mode
+        $translateFrom = $this->get('translate_from', '');
+        $sourceLang = $this->get('source_lang', 'en');
+        $targetLang = $this->get('target_lang', $this->currentLang);
+
+        $prefillData = null;
+        if ($translateFrom) {
+            $sourceContentDir = get_content_dir_for_lang($sourceLang);
+            $sourcePath = $sourceContentDir . '/' . $translateFrom;
+
+            if (file_exists($sourcePath)) {
+                $content = file_get_contents($sourcePath);
+                $parsed = parse_frontmatter($content);
+                $prefillData = [
+                    'frontmatter' => $parsed['frontmatter'],
+                    'body' => $parsed['body'],
+                    'path' => $translateFrom
+                ];
+                $this->currentLang = $targetLang;
+                $pageTitle = 'Translate Article';
+            }
+        }
+
+        // Handle form submission
         if ($this->isPost()) {
             $this->handleCreate();
             return;
         }
 
-        // Handle prefill from translation source
-        $prefillData = [];
-        $translateFrom = $this->get('translate_from');
-        $sourceLang = $this->get('source_lang');
-
-        if ($translateFrom && $sourceLang) {
-            $sourceDir = pugo_get_content_dir_for_lang($sourceLang);
-            $action = new GetContentAction($sourceDir);
-            $result = $action->handle($translateFrom);
-
-            if ($result->success) {
-                $prefillData = [
-                    'frontmatter' => $result->data['frontmatter'],
-                    'body' => $result->data['body'],
-                    'sourceFile' => $translateFrom,
-                ];
-            }
-        }
-
-        $sections = get_sections_with_types($this->currentLang);
+        $sections = get_sections_with_counts($this->currentLang);
 
         $this->render('content/create', [
-            'pageTitle' => 'New Content',
+            'pageTitle' => $pageTitle,
             'sections' => $sections,
-            'currentSection' => $this->get('section'),
+            'currentSection' => $currentSection,
             'prefillData' => $prefillData,
-            'targetLang' => $this->get('target_lang'),
+            'translateFrom' => $translateFrom,
+            'sourceLang' => $sourceLang,
+            'targetLang' => $targetLang,
         ]);
     }
 
@@ -302,23 +387,67 @@ class ContentController extends BaseController
     {
         $this->validateCsrf();
 
-        $section = $this->post('section', 'blog');
-        $slug = $this->post('slug', '');
+        $section = $this->post('section', '');
+        $category = $this->post('category', '');
+        $slug = generate_slug($this->post('title', 'untitled'));
 
-        if (!$slug) {
-            $slug = $this->slugify($this->post('title', 'untitled'));
+        // Build path
+        $contentDir = $this->getContentDir();
+        if ($category) {
+            $filePath = $contentDir . '/' . $section . '/' . $category . '/' . $slug . '.md';
+        } else {
+            $filePath = $contentDir . '/' . $section . '/' . $slug . '.md';
         }
 
-        $frontmatter = $this->buildFrontmatterFromPost();
+        // Check if file already exists
+        if (file_exists($filePath)) {
+            $this->flash('error', 'An article with this slug already exists. Please choose a different title.');
+            $this->redirect('new.php?section=' . urlencode($section) . '&lang=' . $this->currentLang);
+            return;
+        }
+
+        // Build frontmatter
+        $frontmatter = [
+            'title' => $this->post('title', ''),
+            'description' => $this->post('description', ''),
+            'author' => $this->post('author', 'XloveCam Team'),
+            'date' => date('Y-m-d'),
+            'lastmod' => date('Y-m-d'),
+        ];
+
+        if ($translationKey = $this->post('translationKey')) {
+            $frontmatter['translationKey'] = $translationKey;
+        }
+        if ($this->post('draft')) {
+            $frontmatter['draft'] = true;
+        }
+
         $body = $this->post('body', '');
 
-        $result = $this->contentService->createAndRebuild($section, $slug, $frontmatter, $body);
+        // Create directory if needed
+        $dir = dirname($filePath);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
 
-        if ($result->success) {
-            $this->flash('success', $result->message);
-            $this->redirect('edit.php?file=' . urlencode($result->data['relative_path']) . '&lang=' . $this->currentLang);
+        // Save the file
+        if (save_article($filePath, $frontmatter, $body)) {
+            // Build Hugo
+            $buildResult = build_hugo();
+            
+            // Determine relative path for edit link
+            $relativePath = str_replace($contentDir . '/', '', $filePath);
+            
+            if ($buildResult['success']) {
+                $this->flash('success', 'Article created and site rebuilt successfully!');
+            } else {
+                $this->flash('success', 'Article created successfully!');
+                $this->flash('warning', 'Hugo rebuild had warnings.');
+            }
+            
+            $this->redirect('edit.php?file=' . urlencode($relativePath) . '&lang=' . $this->currentLang);
         } else {
-            $this->flash('error', $result->error);
+            $this->flash('error', 'Failed to create article');
             $this->redirect('new.php?section=' . urlencode($section) . '&lang=' . $this->currentLang);
         }
     }
@@ -366,3 +495,4 @@ class ContentController extends BaseController
         return trim($text, '-');
     }
 }
+

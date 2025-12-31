@@ -1,16 +1,11 @@
 <?php
 /**
- * TaxonomyController - Tags and categories management
+ * TaxonomyController - Tags, categories, and keywords management
  * 
  * Uses Tags Actions directly for tag operations.
  */
 
 namespace Pugo\Controllers;
-
-use Pugo\Actions\Tags\ListTagsAction;
-use Pugo\Actions\Tags\RenameTagAction;
-use Pugo\Actions\Tags\MergeTagsAction;
-use Pugo\Actions\Tags\DeleteTagAction;
 
 class TaxonomyController extends BaseController
 {
@@ -18,36 +13,66 @@ class TaxonomyController extends BaseController
     {
         parent::__construct();
         require_once dirname(__DIR__) . '/includes/functions.php';
+        require_once dirname(__DIR__) . '/Actions/bootstrap.php';
     }
 
     /**
-     * List all tags with counts
+     * List taxonomy (tags, categories, keywords)
      */
     public function index(): void
     {
         $this->requireAuth();
 
+        $view = $this->get('view', 'tags');
         $contentDir = $this->getContentDir();
-        
-        // Use Action directly
-        $action = new ListTagsAction($contentDir);
-        $result = $action->handle();
+        $message = '';
+        $messageType = '';
 
-        $tags = $result->success ? $result->data['tags'] : [];
-        
-        // Sort by count descending
-        usort($tags, fn($a, $b) => $b['count'] - $a['count']);
+        // Handle POST actions
+        if ($this->isPost() && $this->post('action')) {
+            $this->validateCsrf();
+            $actionType = $this->post('action');
 
-        // Get categories (section _index.md files)
-        $categories = $this->getCategories();
+            if ($actionType === 'rename_tag') {
+                $result = \Actions::renameTag($this->currentLang)->handle(
+                    $this->post('old_tag', ''),
+                    $this->post('new_tag', '')
+                );
+                $message = $result->message;
+                $messageType = $result->success ? 'success' : 'error';
+            } elseif ($actionType === 'merge_tags') {
+                $result = \Actions::mergeTags($this->currentLang)->handle(
+                    $this->post('source_tag', ''),
+                    $this->post('target_tag', '')
+                );
+                $message = $result->message;
+                $messageType = $result->success ? 'success' : 'error';
+            } elseif ($actionType === 'delete_tag') {
+                $result = \Actions::deleteTag($this->currentLang)->handle(
+                    $this->post('tag', '')
+                );
+                $message = $result->message;
+                $messageType = $result->success ? 'success' : 'error';
+            }
+        }
+
+        // Get taxonomy data
+        $tagsResult = \Actions::listTags($this->currentLang)->handle();
+        $tags = $tagsResult->success ? $tagsResult->data['tags'] : [];
+
+        // Legacy functions for taxonomy and keywords
+        $taxonomy = get_article_taxonomy($this->currentLang);
+        $keywords = get_all_keywords($this->currentLang);
 
         $this->render('taxonomy/index', [
             'pageTitle' => 'Taxonomy',
+            'view' => $view,
             'tags' => $tags,
-            'categories' => $categories,
-            'totalTags' => count($tags),
-            'success' => $this->getFlash('success'),
-            'error' => $this->getFlash('error'),
+            'taxonomy' => $taxonomy,
+            'keywords' => $keywords,
+            'contentDir' => $contentDir,
+            'message' => $message,
+            'messageType' => $messageType,
         ]);
     }
 

@@ -46,34 +46,35 @@ $controller_routes = [
     
     // === Content Management ===
     'articles'      => ['ContentController', 'index'],
-    // 'edit'          => ['ContentController', 'edit'],
-    // 'new'           => ['ContentController', 'create'],
-    // 'content/delete'=> ['ContentController', 'delete'],
+    'edit'          => ['ContentController', 'edit'],
+    'new'           => ['ContentController', 'create'],
+    'content/delete'=> ['ContentController', 'delete'],
     
     // === Media Library ===
     'media'         => ['MediaController', 'index'],
-    // 'media/upload'  => ['MediaController', 'upload'],
-    // 'media/delete'  => ['MediaController', 'delete'],
-    // 'media/folder'  => ['MediaController', 'createFolder'],
     
     // === Taxonomy (Tags/Categories) ===
-    // 'taxonomy'      => ['TaxonomyController', 'index'],
-    // 'taxonomy/rename' => ['TaxonomyController', 'rename'],
-    // 'taxonomy/merge'  => ['TaxonomyController', 'merge'],
-    // 'taxonomy/delete' => ['TaxonomyController', 'delete'],
+    'taxonomy'      => ['TaxonomyController', 'index'],
+    
+    // === Pages (Standalone) ===
+    'pages'         => ['PagesController', 'index'],
+    'page-edit'     => ['PagesController', 'edit'],
+    
+    // === Settings ===
+    'settings'      => ['SettingsController', 'index'],
+    
+    // === Scanner ===
+    'scanner'       => ['ScannerController', 'index'],
     
     // === Data Files ===
-    // 'data'          => ['DataController', 'index'],
-    // 'data/edit'     => ['DataController', 'edit'],
-    // 'data/create'   => ['DataController', 'create'],
-    // 'data/delete'   => ['DataController', 'delete'],
+    'data'          => ['DataController', 'index'],
     
     // === Authentication ===
-    // 'login'         => ['AuthController', 'login'],
-    // 'logout'        => ['AuthController', 'logout'],
+    'login'         => ['AuthController', 'login'],
+    'logout'        => ['AuthController', 'logout'],
     
     // === API ===
-    // 'api'           => ['ApiController', 'handle'],
+    'api'           => ['ApiController', 'handle'],
 ];
 
 /**

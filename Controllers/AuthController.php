@@ -1,8 +1,6 @@
 <?php
 /**
- * AuthController - Authentication management
- * 
- * Handles login/logout. Simple operations stay in controller.
+ * AuthController - Authentication handling
  */
 
 namespace Pugo\Controllers;
@@ -16,113 +14,226 @@ class AuthController extends BaseController
     }
 
     /**
-     * Show login form or process login
+     * Login page
      */
     public function login(): void
     {
-        // Redirect if already logged in
+        // Already logged in?
         if (is_authenticated()) {
             $this->redirect('index.php');
-        }
-
-        if ($this->isPost()) {
-            $this->handleLogin();
             return;
         }
 
-        // Show login form (no layout, standalone page)
-        $this->renderWithoutLayout('auth/login', [
-            'pageTitle' => 'Login',
-            'error' => $this->getFlash('error'),
-            'siteName' => $this->config['site_name'] ?? 'Pugo Admin'
-        ]);
-    }
+        $error = '';
 
-    /**
-     * Process login attempt
-     */
-    private function handleLogin(): void
-    {
-        $username = $this->post('username', '');
-        $password = $this->post('password', '');
+        if ($this->isPost()) {
+            $username = $this->post('username', '');
+            $password = $this->post('password', '');
 
-        if (!$username || !$password) {
-            $this->flash('error', 'Username and password required');
-            $this->redirect('login.php');
-        }
-
-        // Verify credentials
-        $configUser = $this->config['admin_user'] ?? 'admin';
-        $configHash = $this->config['admin_password_hash'] ?? '';
-
-        if ($username === $configUser && password_verify($password, $configHash)) {
-            // Start session and set authenticated
-            if (session_status() === PHP_SESSION_NONE) {
-                session_start();
+            if (authenticate($username, $password)) {
+                $this->redirect('index.php');
+                return;
+            } else {
+                $error = 'Invalid username or password';
             }
-            $_SESSION['authenticated'] = true;
-            $_SESSION['user'] = $username;
-            $_SESSION['login_time'] = time();
-
-            // Regenerate session ID for security
-            session_regenerate_id(true);
-
-            $this->redirect('index.php');
-        } else {
-            // Invalid credentials
-            $this->flash('error', 'Invalid username or password');
-            $this->redirect('login.php');
         }
+
+        // Render login page (custom layout without header/footer)
+        $this->renderLogin($error);
     }
 
     /**
-     * Logout and destroy session
+     * Logout
      */
     public function logout(): void
     {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-
-        // Clear session data
-        $_SESSION = [];
-
-        // Destroy the session cookie
-        if (ini_get('session.use_cookies')) {
-            $params = session_get_cookie_params();
-            setcookie(
-                session_name(),
-                '',
-                time() - 42000,
-                $params['path'],
-                $params['domain'],
-                $params['secure'],
-                $params['httponly']
-            );
-        }
-
-        // Destroy session
-        session_destroy();
-
+        logout();
         $this->redirect('login.php');
     }
 
     /**
-     * Render without admin layout (for login page)
+     * Render login page with custom layout
      */
-    private function renderWithoutLayout(string $view, array $data = []): void
+    private function renderLogin(string $error = ''): void
     {
-        $data = array_merge($this->viewData, $data);
-        extract($data);
-
-        $viewPath = dirname(__DIR__) . '/Views/' . $view . '.php';
-        
-        if (file_exists($viewPath)) {
-            require $viewPath;
-        } else {
-            // Fallback to legacy login page
-            require dirname(__DIR__) . '/pages/login.php';
+        $siteName = $this->config['site_name'] ?? 'Pugo CMS';
+        ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - <?= htmlspecialchars($siteName) ?></title>
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #141414;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #fafafa;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --border-color: #27272a;
+            --accent-primary: #e11d48;
+            --radius-md: 12px;
         }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 20px;
+        }
+        
+        .login-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 40px;
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .login-logo {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--accent-primary), #f43f5e);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+        }
+        
+        .login-logo svg {
+            width: 32px;
+            height: 32px;
+            color: white;
+        }
+        
+        .login-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        
+        .login-subtitle {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--accent-primary);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        .btn:hover {
+            background: #be123c;
+        }
+        
+        .error {
+            background: rgba(225, 29, 72, 0.1);
+            border: 1px solid var(--accent-primary);
+            color: var(--accent-primary);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        
+        .login-footer {
+            text-align: center;
+            margin-top: 24px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-logo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                        <path d="M2 17l10 5 10-5"/>
+                        <path d="M2 12l10 5 10-5"/>
+                    </svg>
+                </div>
+                <h1 class="login-title">Pugo Admin</h1>
+                <p class="login-subtitle"><?= htmlspecialchars($siteName) ?></p>
+            </div>
+            
+            <?php if ($error): ?>
+            <div class="error"><?= htmlspecialchars($error) ?></div>
+            <?php endif; ?>
+            
+            <form method="POST">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" name="username" class="form-input" required autofocus>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" name="password" class="form-input" required>
+                </div>
+                
+                <button type="submit" class="btn">Sign In</button>
+            </form>
+            
+            <p class="login-footer">Secure admin access for content management</p>
+        </div>
+    </div>
+</body>
+</html>
+        <?php
+        exit;
     }
 }
-
