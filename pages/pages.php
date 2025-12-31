@@ -25,7 +25,7 @@ if (!isset($config['languages'][$current_lang])) {
  */
 function discover_pages($lang = 'en', $config = []) {
     $pages = [];
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . ($config['languages'][$lang]['content_dir'] ?? 'content');
+    $content_dir = get_content_dir_for_lang($lang);
     
     if (!is_dir($content_dir)) {
         return $pages;

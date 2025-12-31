@@ -4,6 +4,39 @@
  */
 
 /**
+ * Get the content directory for a specific language
+ * 
+ * This uses the content_dir from config, NOT hardcoded assumptions about 'en'.
+ * Supports projects where English might be in content.en instead of content/
+ * 
+ * @param string $lang Language code
+ * @return string Full path to content directory
+ */
+function get_content_dir_for_lang($lang = 'en') {
+    global $config;
+    
+    // Get content_dir from config, with smart fallbacks
+    $content_dir = $config['languages'][$lang]['content_dir'] ?? null;
+    
+    if ($content_dir) {
+        // If it's already an absolute path, use it directly
+        if (str_starts_with($content_dir, '/')) {
+            return $content_dir;
+        }
+        // Otherwise, prepend HUGO_ROOT
+        return HUGO_ROOT . '/' . $content_dir;
+    }
+    
+    // Fallback: use CONTENT_DIR for default language, content.{lang} for others
+    $default_lang = $config['default_language'] ?? 'en';
+    if ($lang === $default_lang) {
+        return CONTENT_DIR;
+    }
+    
+    return HUGO_ROOT . '/content.' . $lang;
+}
+
+/**
  * Parse YAML frontmatter from markdown content
  */
 function parse_frontmatter($content) {
@@ -106,7 +139,7 @@ function frontmatter_to_yaml($data) {
 function get_articles($lang = 'en', $section = null) {
     global $config;
     
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$lang]['content_dir'];
+    $content_dir = get_content_dir_for_lang($lang);
     
     if (!is_dir($content_dir)) {
         return [];
@@ -206,7 +239,7 @@ if (!function_exists('discover_sections')) {
 function get_sections_with_counts($lang = 'en') {
     global $config;
     
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . ($config['languages'][$lang]['content_dir'] ?? 'content');
+    $content_dir = get_content_dir_for_lang($lang);
     $discovered_sections = discover_sections();
     $sections = [];
     
@@ -240,7 +273,7 @@ function get_sections_with_counts($lang = 'en') {
 function get_all_articles_for_selection($lang = 'en') {
     global $config;
     
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$lang]['content_dir'];
+    $content_dir = get_content_dir_for_lang($lang);
     
     if (!is_dir($content_dir)) return [];
     
@@ -290,7 +323,7 @@ function get_all_articles_for_selection($lang = 'en') {
 function get_all_tags($lang = 'en') {
     global $config;
     
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$lang]['content_dir'];
+    $content_dir = get_content_dir_for_lang($lang);
     $tags = [];
     
     if (!is_dir($content_dir)) return $tags;
@@ -330,7 +363,7 @@ function get_all_tags($lang = 'en') {
 function get_all_keywords($lang = 'en') {
     global $config;
     
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$lang]['content_dir'];
+    $content_dir = get_content_dir_for_lang($lang);
     $keywords = [];
     
     if (!is_dir($content_dir)) return $keywords;
@@ -373,7 +406,7 @@ function get_section_language_parity() {
     $sections_by_lang = [];
     
     foreach ($config['languages'] as $lang => $lang_config) {
-        $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $lang_config['content_dir'];
+        $content_dir = get_content_dir_for_lang($lang);
         $sections_by_lang[$lang] = [];
         
         if (is_dir($content_dir)) {
@@ -426,7 +459,7 @@ function get_section_language_parity() {
 function get_article_taxonomy($lang = 'en') {
     global $config;
     
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$lang]['content_dir'];
+    $content_dir = get_content_dir_for_lang($lang);
     
     $taxonomy = [];
     
@@ -494,7 +527,7 @@ function get_article_taxonomy($lang = 'en') {
 function get_categories($section, $lang = 'en') {
     global $config;
     
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$lang]['content_dir'];
+    $content_dir = get_content_dir_for_lang($lang);
     $section_path = $content_dir . '/' . $section;
     
     if (!is_dir($section_path)) return [];
@@ -548,7 +581,7 @@ function get_translation_status($translation_key, $source_lang = 'en') {
     $status = [];
     
     foreach ($config['languages'] as $lang => $lang_config) {
-        $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $lang_config['content_dir'];
+        $content_dir = get_content_dir_for_lang($lang);
         
         // Search for file with this translation key
         $found = false;
@@ -888,7 +921,7 @@ function time_ago($timestamp) {
 function rename_tag($old_tag, $new_tag, $lang = 'en') {
     global $config;
     
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$lang]['content_dir'];
+    $content_dir = get_content_dir_for_lang($lang);
     $count = 0;
     
     if (!is_dir($content_dir)) {
@@ -939,7 +972,7 @@ function rename_tag($old_tag, $new_tag, $lang = 'en') {
 function merge_tags($source_tag, $target_tag, $lang = 'en') {
     global $config;
     
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$lang]['content_dir'];
+    $content_dir = get_content_dir_for_lang($lang);
     $count = 0;
     
     if (!is_dir($content_dir)) {
@@ -999,7 +1032,7 @@ function merge_tags($source_tag, $target_tag, $lang = 'en') {
 function delete_tag($tag, $lang = 'en') {
     global $config;
     
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$lang]['content_dir'];
+    $content_dir = get_content_dir_for_lang($lang);
     $count = 0;
     
     if (!is_dir($content_dir)) {
@@ -1120,7 +1153,7 @@ function detect_hugo_template($section, $frontmatter = [], $is_index = false) {
 function get_content_using_template($template_path, $lang = 'en') {
     global $config;
     
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$lang]['content_dir'];
+    $content_dir = get_content_dir_for_lang($lang);
     if (!is_dir($content_dir)) return [];
     
     // Parse template path to understand what it handles

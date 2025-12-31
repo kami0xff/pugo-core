@@ -76,7 +76,7 @@ function scan_content() {
     global $config, $issues, $warnings, $info, $stats, $RULES;
     
     foreach ($config['languages'] as $lang => $lang_config) {
-        $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $lang_config['content_dir'];
+        $content_dir = get_content_dir_for_lang($lang);
         
         if (!is_dir($content_dir)) {
             if ($lang !== 'en') {
@@ -462,7 +462,7 @@ function scan_orphaned_images() {
     
     // Check all content for references
     foreach ($config['languages'] as $lang => $lang_config) {
-        $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $lang_config['content_dir'];
+        $content_dir = get_content_dir_for_lang($lang);
         if (!is_dir($content_dir)) continue;
         
         $content_iterator = new RecursiveIteratorIterator(

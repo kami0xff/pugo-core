@@ -33,7 +33,7 @@ $content_by_type = get_content_stats_by_type($current_lang);
 // Count translations
 $translation_stats = [];
 foreach ($config['languages'] as $lang => $lang_config) {
-    $content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $lang_config['content_dir'];
+    $content_dir = get_content_dir_for_lang($lang);
     $translation_stats[$lang] = is_dir($content_dir) ? count(get_articles($lang)) : 0;
 }
 

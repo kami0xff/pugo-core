@@ -509,7 +509,7 @@ require __DIR__ . '/../includes/editor-styles.php';
 <div class="lang-tabs" style="margin-bottom: 24px;">
     <?php foreach ($config['languages'] as $lang => $lang_config): 
         // Check if this language version exists
-        $lang_content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . ($lang_config['content_dir'] ?? 'content');
+        $lang_content_dir = get_content_dir_for_lang($lang);
         $lang_page_path = $lang_content_dir . '/' . $page_slug . '/_index.md';
         $lang_exists = file_exists($lang_page_path);
         $is_current = $lang === $current_lang;
@@ -791,7 +791,7 @@ require __DIR__ . '/../includes/editor-styles.php';
                 <div class="sidebar-card-body">
                     <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                         <?php foreach ($config['languages'] as $lang => $lang_config): 
-                            $lang_content_dir = $lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . ($lang_config['content_dir'] ?? 'content');
+                            $lang_content_dir = get_content_dir_for_lang($lang);
                             $lang_page_exists = file_exists($lang_content_dir . '/' . $page_slug . '/_index.md');
                             $is_current = $lang === $current_lang;
                         ?>
