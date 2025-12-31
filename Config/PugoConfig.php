@@ -414,7 +414,8 @@ class PugoConfig
                     'default' => $isDefault,
                     'suffix' => $isDefault ? '' : ($lang['suffix'] ?? '.' . $code),
                     'data_suffix' => $isDefault ? '' : ($lang['data_suffix'] ?? '.' . $code),
-                    'content_dir' => $isDefault ? 'content' : ($lang['content_dir'] ?? 'content.' . $code),
+                    // Respect explicit content_dir from YAML, otherwise use defaults
+                    'content_dir' => $lang['content_dir'] ?? ($isDefault ? 'content' : 'content.' . $code),
                 ];
             }
         }
