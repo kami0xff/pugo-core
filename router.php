@@ -2,8 +2,9 @@
 /**
  * Pugo Router
  * 
- * This file routes requests to the appropriate page in core/pages/.
- * Place this as index.php in your admin folder or include it from there.
+ * Routes requests to either:
+ * 1. New Controller classes (Controller-View architecture)
+ * 2. Legacy page files in core/pages/ (backward compatible)
  * 
  * Usage in your admin/index.php:
  *   <?php require __DIR__ . '/core/router.php';
@@ -19,7 +20,31 @@ if (!defined('PUGO_CORE_ROOT')) {
     define('PUGO_CORE_ROOT', __DIR__);
 }
 
-// Map URL to page files
+// Define HUGO_ADMIN for includes
+if (!defined('HUGO_ADMIN')) {
+    define('HUGO_ADMIN', true);
+}
+
+/**
+ * Controller routes (new architecture)
+ * 
+ * Format: 'route' => ['ControllerClass', 'method']
+ * 
+ * Enable these routes gradually as you migrate pages to controllers.
+ * Uncomment a route to use the controller instead of legacy page file.
+ */
+$controller_routes = [
+    // Example: Uncomment to use ContentController for articles listing
+    // 'content'    => ['ContentController', 'index'],
+    // 'content/edit' => ['ContentController', 'edit'],
+    // 'content/new'  => ['ContentController', 'create'],
+    // 'content/delete' => ['ContentController', 'delete'],
+];
+
+/**
+ * Legacy page map (backward compatible)
+ * These pages work as before - single PHP files with mixed logic/view
+ */
 $page_map = [
     ''           => 'index.php',
     'index'      => 'index.php',
@@ -36,6 +61,11 @@ $page_map = [
     'login'      => 'login.php',
     'logout'     => 'logout.php',
     'api'        => 'api.php',
+    'pages'      => 'pages.php',
+    'page-edit'  => 'page-edit.php',
+    'templates'  => 'templates.php',
+    'template-edit' => 'template-edit.php',
+    'components' => 'components.php',
 ];
 
 // Determine which page to load
@@ -52,7 +82,34 @@ $path = preg_replace('#\.php$#', '', $path);
 // Get the page name
 $page = $path ?: 'index';
 
-// Check if page exists
+/**
+ * Try controller route first (new architecture)
+ */
+if (isset($controller_routes[$page])) {
+    [$controllerName, $method] = $controller_routes[$page];
+    $controllerClass = "\\Pugo\\Controllers\\{$controllerName}";
+    
+    // Autoload controller
+    require_once PUGO_CORE_ROOT . '/Controllers/BaseController.php';
+    require_once PUGO_CORE_ROOT . "/Controllers/{$controllerName}.php";
+    
+    // Load config
+    $config = require PUGO_ADMIN_ROOT . '/config.php';
+    
+    // Set current page for sidebar
+    $GLOBALS['pugo_current_page'] = explode('/', $page)[0];
+    
+    // Instantiate and call method
+    $controller = new $controllerClass();
+    $controller->$method();
+    exit;
+}
+
+/**
+ * Fall back to legacy page files
+ */
+
+// Check if page exists in map
 if (!isset($page_map[$page])) {
     // Try direct file access for backward compatibility
     $direct_file = PUGO_CORE_ROOT . '/pages/' . $page . '.php';
