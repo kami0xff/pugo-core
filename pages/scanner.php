@@ -12,6 +12,10 @@ require_auth();
 
 $page_title = 'Project Scanner';
 
+// Determine the default/primary language for scanning
+$default_lang = $config['default_language'] ?? 'en';
+$default_content_dir = get_content_dir_for_lang($default_lang);
+
 // Run the scan
 $issues = [];
 $warnings = [];
@@ -246,10 +250,10 @@ function scan_content() {
  * Check section and category structure
  */
 function scan_structure() {
-    global $issues, $warnings, $info, $RULES;
+    global $issues, $warnings, $info, $RULES, $default_content_dir;
     
     foreach ($RULES['valid_sections'] as $section) {
-        $section_path = CONTENT_DIR . '/' . $section;
+        $section_path = $default_content_dir . '/' . $section;
         
         // Check section exists
         if (!is_dir($section_path)) {
@@ -399,13 +403,13 @@ function scan_images() {
  * Check image folder structure matches article structure
  */
 function scan_image_structure() {
-    global $config, $warnings, $info, $RULES;
+    global $config, $warnings, $info, $RULES, $default_content_dir;
     
     // Get all articles with images referenced
     $articles_with_images = [];
     
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator(CONTENT_DIR, RecursiveDirectoryIterator::SKIP_DOTS)
+        new RecursiveDirectoryIterator($default_content_dir, RecursiveDirectoryIterator::SKIP_DOTS)
     );
     
     foreach ($iterator as $file) {
@@ -416,7 +420,7 @@ function scan_image_structure() {
             // Check if article has images
             preg_match_all('/!\[.*?\]\((\/images\/articles\/[^)]+)\)/', $parsed['body'], $matches);
             if (!empty($matches[1]) || !empty($parsed['frontmatter']['image'])) {
-                $relative_path = str_replace(CONTENT_DIR . '/', '', $file->getPathname());
+                $relative_path = str_replace($default_content_dir . '/', '', $file->getPathname());
                 $expected_folder = get_expected_image_folder($relative_path);
                 $full_expected = STATIC_DIR . $expected_folder;
                 
@@ -522,13 +526,13 @@ function scan_orphaned_images() {
  * Check translation coverage
  */
 function scan_translations() {
-    global $config, $info;
+    global $config, $info, $default_lang, $default_content_dir;
     
-    // Get all English articles with translation keys
-    $english_articles = [];
+    // Get all articles from default language with translation keys
+    $default_articles = [];
     
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator(CONTENT_DIR, RecursiveDirectoryIterator::SKIP_DOTS)
+        new RecursiveDirectoryIterator($default_content_dir, RecursiveDirectoryIterator::SKIP_DOTS)
     );
     
     foreach ($iterator as $file) {
@@ -537,22 +541,22 @@ function scan_translations() {
             $parsed = parse_frontmatter($content);
             $key = $parsed['frontmatter']['translationKey'] ?? null;
             if ($key) {
-                $english_articles[$key] = str_replace(CONTENT_DIR . '/', '', $file->getPathname());
+                $default_articles[$key] = str_replace($default_content_dir . '/', '', $file->getPathname());
             }
         }
     }
     
-    if (empty($english_articles)) return;
+    if (empty($default_articles)) return;
     
-    // Check each language
+    // Check each language (skip the default language)
     foreach ($config['languages'] as $lang => $lang_config) {
-        if ($lang === 'en') continue;
+        if ($lang === $default_lang) continue;
         
         $content_dir = HUGO_ROOT . '/' . $lang_config['content_dir'];
         if (!is_dir($content_dir)) {
             $info[] = [
                 'type' => 'translation',
-                'message' => "{$lang_config['name']}: 0/" . count($english_articles) . " articles translated",
+                'message' => "{$lang_config['name']}: 0/" . count($default_articles) . " articles translated",
                 'path' => $lang_config['content_dir'] . '/',
                 'fix' => 'Create translations for your content'
             ];
@@ -574,8 +578,8 @@ function scan_translations() {
             }
         }
         
-        $translated_count = count(array_intersect(array_keys($english_articles), $translated_keys));
-        $total_count = count($english_articles);
+        $translated_count = count(array_intersect(array_keys($default_articles), $translated_keys));
+        $total_count = count($default_articles);
         $percentage = $total_count > 0 ? round(($translated_count / $total_count) * 100) : 0;
         
         $info[] = [

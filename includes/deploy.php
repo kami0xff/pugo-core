@@ -1,6 +1,9 @@
 <?php
 /**
- * Simple Deploy Function
+ * Simple Deploy Function (LEGACY)
+ * 
+ * @deprecated Use Pugo\Deployment\DeploymentManager instead.
+ * This file is kept for backward compatibility but will be removed in a future version.
  * 
  * Pushes the built Hugo output (public/) to a git remote.
  * The public/ folder should have its own .git initialized pointing to your deploy repo.

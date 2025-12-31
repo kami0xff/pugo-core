@@ -20,7 +20,7 @@ $target_lang = $_GET['target_lang'] ?? $current_lang;
 
 $source_article = null;
 if ($translate_from) {
-    $source_content_dir = $source_lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$source_lang]['content_dir'];
+    $source_content_dir = get_content_dir_for_lang($source_lang);
     $source_path = $source_content_dir . '/' . $translate_from;
     
     if (file_exists($source_path)) {
@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $slug = generate_slug($_POST['title'] ?? 'untitled');
     
     // Build path
-    $content_dir = $current_lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$current_lang]['content_dir'];
+    $content_dir = get_content_dir_for_lang($current_lang);
     
     if ($category) {
         $file_path = $content_dir . '/' . $section . '/' . $category . '/' . $slug . '.md';

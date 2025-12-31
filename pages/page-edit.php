@@ -27,7 +27,7 @@ if (!isset($config['languages'][$current_lang])) {
     $current_lang = 'en';
 }
 
-$content_dir = $current_lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . ($config['languages'][$current_lang]['content_dir'] ?? 'content');
+$content_dir = get_content_dir_for_lang($current_lang);
 
 // Initialize page data
 $page_data = [
@@ -52,7 +52,7 @@ if ($is_new) {
     
     if ($translate_from) {
         // Load source page content
-        $source_content_dir = $source_lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . ($config['languages'][$source_lang]['content_dir'] ?? 'content');
+        $source_content_dir = get_content_dir_for_lang($source_lang);
         $source_path = $source_content_dir . '/' . $translate_from . '/_index.md';
         
         if (file_exists($source_path)) {
@@ -70,7 +70,7 @@ if ($is_new) {
             $page_data['frontmatter'] = $source_parsed['frontmatter'];
             $page_slug = $translate_from;
             $current_lang = $target_lang;
-            $content_dir = $target_lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . ($config['languages'][$target_lang]['content_dir'] ?? 'content');
+            $content_dir = get_content_dir_for_lang($target_lang);
             
             $page_title = 'Create ' . ($config['languages'][$target_lang]['name'] ?? $target_lang) . ' Translation';
         }

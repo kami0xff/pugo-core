@@ -39,7 +39,7 @@ foreach ($config['languages'] as $lang => $lang_config) {
 
 // Get standalone pages count
 $pages_count = 0;
-$content_dir = $current_lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$current_lang]['content_dir'];
+$content_dir = get_content_dir_for_lang($current_lang);
 if (is_dir($content_dir)) {
     foreach (scandir($content_dir) as $item) {
         if ($item[0] === '.' || !is_dir($content_dir . '/' . $item)) continue;

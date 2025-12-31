@@ -185,8 +185,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <path d="M2 12l10 5 10-5"/>
                     </svg>
                 </div>
-                <h1 class="login-title">Hugo Admin</h1>
-                <p class="login-subtitle">XloveCam Help Center</p>
+                <h1 class="login-title">Pugo Admin</h1>
+                <p class="login-subtitle"><?= htmlspecialchars($config['site_name'] ?? 'Content Management') ?></p>
             </div>
             
             <?php if ($error): ?>

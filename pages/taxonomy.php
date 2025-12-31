@@ -15,6 +15,7 @@ require_auth();
 
 $current_lang = $_GET['lang'] ?? 'en';
 $view = $_GET['view'] ?? 'tags';
+$content_dir = get_content_dir_for_lang($current_lang);
 
 // Handle tag operations via POST using Actions
 $message = '';
@@ -779,7 +780,7 @@ include __DIR__ . '/includes/header.php';
                                 $shown = 0;
                                 foreach ($tag_data['articles'] as $article): 
                                     if ($shown >= 2) break;
-                                    $relative = str_replace(CONTENT_DIR . '/', '', $article['path']);
+                                    $relative = str_replace($content_dir . '/', '', $article['path']);
                                 ?>
                                 <div class="tag-article-preview">
                                     <a href="edit.php?file=<?= urlencode($relative) ?>&lang=<?= $current_lang ?>">
@@ -915,7 +916,7 @@ include __DIR__ . '/includes/header.php';
                     <div class="tag-card-articles">
                         <?php foreach ($keyword_data['articles'] as $article): ?>
                             <?php 
-                                $relative = str_replace(CONTENT_DIR . '/', '', $article['path']);
+                                $relative = str_replace($content_dir . '/', '', $article['path']);
                             ?>
                             <a href="edit.php?file=<?= urlencode($relative) ?>&lang=<?= $current_lang ?>" 
                                class="tag-card-article-link">

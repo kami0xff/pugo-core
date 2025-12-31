@@ -20,7 +20,7 @@ if (!$file) {
 }
 
 // Construct full path
-$content_dir = $current_lang === 'en' ? CONTENT_DIR : HUGO_ROOT . '/' . $config['languages'][$current_lang]['content_dir'];
+$content_dir = get_content_dir_for_lang($current_lang);
 $file_path = $content_dir . '/' . $file;
 
 // Check if file exists
