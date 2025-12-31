@@ -51,7 +51,7 @@ $controller_routes = [
     // 'content/delete'=> ['ContentController', 'delete'],
     
     // === Media Library ===
-    // 'media'         => ['MediaController', 'index'],
+    'media'         => ['MediaController', 'index'],
     // 'media/upload'  => ['MediaController', 'upload'],
     // 'media/delete'  => ['MediaController', 'delete'],
     // 'media/folder'  => ['MediaController', 'createFolder'],

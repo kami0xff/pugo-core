@@ -29,28 +29,94 @@ class MediaController extends BaseController
     {
         $this->requireAuth();
 
-        $path = $this->get('path', '');
-        $fullPath = $this->mediaDir . '/' . ltrim($path, '/');
+        $currentPath = $this->get('path', '');
+        $uploadMessage = null;
 
-        // Use Action directly (simple operation)
-        $action = new ListMediaAction($this->mediaDir);
-        $result = $action->handle($path);
+        // Handle POST actions
+        if ($this->isPost()) {
+            $uploadMessage = $this->handlePostAction($currentPath);
+        }
 
-        $items = $result->success ? $result->data['items'] : [];
-        $folders = $result->success ? ($result->data['folders'] ?? []) : [];
-
-        // Build breadcrumb
-        $breadcrumb = $this->buildBreadcrumb($path);
+        // Get media files using helper function
+        $media = get_media_files($currentPath);
 
         $this->render('media/index', [
             'pageTitle' => 'Media Library',
-            'items' => $items,
-            'folders' => $folders,
-            'currentPath' => $path,
-            'breadcrumb' => $breadcrumb,
-            'success' => $this->getFlash('success'),
-            'error' => $this->getFlash('error'),
+            'media' => $media,
+            'currentPath' => $currentPath,
+            'uploadMessage' => $uploadMessage,
         ]);
+    }
+
+    /**
+     * Handle POST actions (upload, delete, create folder)
+     */
+    private function handlePostAction(string &$currentPath): ?array
+    {
+        $this->validateCsrf();
+
+        // Handle file upload
+        if (isset($_FILES['file'])) {
+            $file = $_FILES['file'];
+            $targetDir = $this->post('directory', 'articles');
+            $targetPath = IMAGES_DIR . '/' . $targetDir;
+
+            if (!is_dir($targetPath)) {
+                mkdir($targetPath, 0755, true);
+            }
+
+            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            $allowed = array_merge($this->config['allowed_images'], $this->config['allowed_videos']);
+
+            if (!in_array($ext, $allowed)) {
+                return ['type' => 'error', 'text' => 'File type not allowed'];
+            }
+            
+            if ($file['size'] > $this->config['max_upload_size']) {
+                return ['type' => 'error', 'text' => 'File too large (max ' . format_size($this->config['max_upload_size']) . ')'];
+            }
+
+            $filename = generate_slug(pathinfo($file['name'], PATHINFO_FILENAME));
+            $filename = $filename . '-' . time() . '.' . $ext;
+            $destination = $targetPath . '/' . $filename;
+
+            if (move_uploaded_file($file['tmp_name'], $destination)) {
+                $currentPath = $targetDir;
+                return ['type' => 'success', 'text' => 'File uploaded successfully'];
+            }
+            return ['type' => 'error', 'text' => 'Failed to upload file'];
+        }
+
+        // Handle file deletion
+        if ($deletePath = $this->post('delete')) {
+            $fullPath = STATIC_DIR . $deletePath;
+            $realPath = realpath($fullPath);
+
+            if ($realPath && strpos($realPath, realpath(IMAGES_DIR)) === 0 && file_exists($realPath)) {
+                if (unlink($realPath)) {
+                    return ['type' => 'success', 'text' => 'File deleted'];
+                }
+            }
+            return ['type' => 'error', 'text' => 'Failed to delete file'];
+        }
+
+        // Handle folder creation
+        if ($newFolder = $this->post('new_folder')) {
+            $folderName = generate_slug($newFolder);
+            $parent = $this->post('parent', '');
+            $newFolderPath = IMAGES_DIR . ($parent ? '/' . $parent : '') . '/' . $folderName;
+
+            if (!is_dir($newFolderPath)) {
+                if (mkdir($newFolderPath, 0755, true)) {
+                    $currentPath = ($parent ? $parent . '/' : '') . $folderName;
+                    return ['type' => 'success', 'text' => 'Folder created'];
+                }
+                return ['type' => 'error', 'text' => 'Failed to create folder'];
+            }
+            return ['type' => 'error', 'text' => 'Folder already exists'];
+        }
+
+        return null;
     }
 
     /**
